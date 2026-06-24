@@ -1,0 +1,1099 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hex 顏色預覽工具</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #1d252c;
+      --muted: #64717c;
+      --line: #d9e0e6;
+      --surface: #f6f8fa;
+      --panel: #ffffff;
+      --accent: #0e7c86;
+      --accent-dark: #095e66;
+      --preview: #3b82f6;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      display: grid;
+      place-items: center;
+      padding: 28px;
+      background:
+        linear-gradient(135deg, #eef4f7 0%, #f7f4ee 52%, #f0f5f1 100%);
+      color: var(--ink);
+      font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    main {
+      width: min(1120px, 100%);
+      overflow: hidden;
+      border: 1px solid rgba(29, 37, 44, 0.14);
+      border-radius: 8px;
+      background: var(--panel);
+      box-shadow: 0 24px 70px rgba(35, 47, 56, 0.16);
+    }
+
+    .toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      min-height: 48px;
+      padding: 0 18px;
+      border-bottom: 1px solid var(--line);
+      background: #f9fbfc;
+    }
+
+    .window-title {
+      margin: 0;
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: 0;
+    }
+
+    .traffic-lights {
+      display: flex;
+      gap: 8px;
+      flex: 0 0 auto;
+    }
+
+    .traffic-lights span {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+      border: 1px solid rgba(0, 0, 0, 0.12);
+    }
+
+    .traffic-lights span:nth-child(1) { background: #ff605c; }
+    .traffic-lights span:nth-child(2) { background: #ffbd44; }
+    .traffic-lights span:nth-child(3) { background: #00ca4e; }
+
+    .content {
+      display: grid;
+      grid-template-columns: minmax(320px, 390px) minmax(0, 1fr);
+      gap: 0;
+      min-height: 520px;
+    }
+
+    .controls {
+      padding: 30px;
+      border-right: 1px solid var(--line);
+      background: #ffffff;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 10px;
+      color: #2f3a42;
+      font-size: 14px;
+      font-weight: 700;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 10px;
+      align-items: stretch;
+    }
+
+    textarea {
+      width: 100%;
+      min-width: 0;
+      min-height: 164px;
+      resize: vertical;
+      padding: 14px;
+      border: 1px solid #b8c5ce;
+      border-radius: 6px;
+      color: var(--ink);
+      font: 700 14px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      letter-spacing: 0;
+      outline: none;
+      transition: border-color 160ms ease, box-shadow 160ms ease;
+    }
+
+    textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px rgba(14, 124, 134, 0.15);
+    }
+
+    button {
+      height: 48px;
+      width: 48px;
+      flex: 0 0 48px;
+      display: inline-grid;
+      place-items: center;
+      border: 1px solid var(--accent-dark);
+      border-radius: 6px;
+      background: var(--accent);
+      color: #ffffff;
+      cursor: pointer;
+      transition: background 160ms ease, transform 160ms ease;
+    }
+
+    button:hover {
+      background: var(--accent-dark);
+    }
+
+    button:active {
+      transform: translateY(1px);
+    }
+
+    button:disabled {
+      opacity: 0.45;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    button svg {
+      width: 20px;
+      height: 20px;
+      stroke-width: 2.4;
+    }
+
+    .status {
+      min-height: 22px;
+      margin: 12px 0 22px;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .status.invalid {
+      color: #b42318;
+    }
+
+    .readouts {
+      display: grid;
+      gap: 10px;
+    }
+
+    .readout {
+      display: grid;
+      grid-template-columns: 56px minmax(0, 1fr);
+      align-items: center;
+      gap: 12px;
+      min-height: 42px;
+      padding: 10px 12px;
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: var(--surface);
+    }
+
+    .readout span:first-child {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+      text-transform: uppercase;
+    }
+
+    .readout span:last-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font: 700 14px/1.35 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .examples {
+      margin-top: 24px;
+    }
+
+    .examples p {
+      margin: 0 0 10px;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      min-width: 42px;
+      height: 32px;
+      border: 1px solid rgba(29, 37, 44, 0.18);
+      border-radius: 6px;
+      cursor: pointer;
+    }
+
+    .preview-panel {
+      display: flex;
+      flex-direction: column;
+      min-width: 0;
+      background: #eef1f4;
+    }
+
+    .swatches {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 12px;
+      align-content: start;
+      min-height: 390px;
+      padding: 18px;
+      overflow: auto;
+    }
+
+    .swatch {
+      min-height: 150px;
+      display: grid;
+      grid-template-rows: 1fr auto;
+      overflow: hidden;
+      border: 1px solid rgba(29, 37, 44, 0.18);
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .swatch-color {
+      min-height: 88px;
+      background: var(--swatch-color);
+    }
+
+    .swatch-info {
+      padding: 11px 12px 12px;
+      border-top: 1px solid rgba(29, 37, 44, 0.12);
+      background: rgba(255, 255, 255, 0.86);
+    }
+
+    .swatch-name {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .swatch-code {
+      margin-top: 5px;
+      color: var(--muted);
+      font: 800 13px/1 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    }
+
+    .swatch-rgb {
+      margin-top: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .swatch-actions {
+      display: flex;
+      justify-content: flex-end;
+      margin-top: 10px;
+    }
+
+    .small-button,
+    .primary-action,
+    .secondary-action,
+    .tab-button,
+    .dialog-button {
+      width: auto;
+      height: 34px;
+      flex: initial;
+      padding: 0 12px;
+      font: 800 13px/1 ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    .small-button,
+    .secondary-action {
+      border-color: #b8c5ce;
+      background: #ffffff;
+      color: #34424c;
+    }
+
+    .small-button:hover,
+    .secondary-action:hover {
+      background: #edf2f4;
+    }
+
+    .preview-caption {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px;
+      border-top: 1px solid rgba(29, 37, 44, 0.16);
+      background: rgba(255, 255, 255, 0.74);
+      backdrop-filter: blur(10px);
+    }
+
+    .preview-caption p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .preview-caption strong {
+      display: block;
+      margin-top: 4px;
+      font: 800 28px/1.15 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      word-break: break-word;
+    }
+
+    .library {
+      border-top: 1px solid var(--line);
+      background: #ffffff;
+    }
+
+    .library-toolbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 16px 18px;
+      border-bottom: 1px solid var(--line);
+      background: #f9fbfc;
+    }
+
+    .segmented-control {
+      display: inline-flex;
+      gap: 2px;
+      padding: 3px;
+      border: 1px solid #cbd5dc;
+      border-radius: 7px;
+      background: #eaf0f3;
+    }
+
+    .tab-button {
+      border: 0;
+      background: transparent;
+      color: #52616c;
+    }
+
+    .tab-button:hover {
+      background: rgba(255, 255, 255, 0.65);
+    }
+
+    .tab-button.active {
+      background: #ffffff;
+      color: var(--ink);
+      box-shadow: 0 1px 3px rgba(29, 37, 44, 0.16);
+    }
+
+    .library-panel {
+      padding: 18px;
+    }
+
+    .library-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+      gap: 12px;
+    }
+
+    .library-card {
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+    }
+
+    .color-strip {
+      display: flex;
+      height: 52px;
+    }
+
+    .color-strip span {
+      flex: 1 1 0;
+      min-width: 8px;
+    }
+
+    .library-card-body {
+      padding: 12px;
+    }
+
+    .library-card-title {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      font-size: 14px;
+      font-weight: 800;
+    }
+
+    .library-card-meta {
+      margin-top: 5px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+    }
+
+    .library-card-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+      margin-top: 12px;
+    }
+
+    .library-section + .library-section {
+      margin-top: 24px;
+      padding-top: 20px;
+      border-top: 1px solid var(--line);
+    }
+
+    .library-heading {
+      margin: 0 0 12px;
+      font-size: 14px;
+    }
+
+    .library-empty {
+      grid-column: 1 / -1;
+      padding: 32px 16px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    dialog {
+      width: min(420px, calc(100% - 32px));
+      padding: 0;
+      border: 1px solid rgba(29, 37, 44, 0.2);
+      border-radius: 8px;
+      color: var(--ink);
+      box-shadow: 0 24px 70px rgba(29, 37, 44, 0.25);
+    }
+
+    dialog::backdrop {
+      background: rgba(29, 37, 44, 0.38);
+    }
+
+    .dialog-content {
+      padding: 22px;
+    }
+
+    .dialog-content h2 {
+      margin: 0 0 18px;
+      font-size: 18px;
+    }
+
+    .dialog-content input {
+      width: 100%;
+      height: 44px;
+      padding: 0 12px;
+      border: 1px solid #b8c5ce;
+      border-radius: 6px;
+      color: var(--ink);
+      font: 700 15px/1 ui-sans-serif, system-ui, sans-serif;
+      outline: none;
+    }
+
+    .dialog-content input:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 4px rgba(14, 124, 134, 0.15);
+    }
+
+    .dialog-actions {
+      display: flex;
+      justify-content: flex-end;
+      gap: 8px;
+      margin-top: 20px;
+    }
+
+    .dialog-button.cancel {
+      border-color: #b8c5ce;
+      background: #ffffff;
+      color: #34424c;
+    }
+
+    .empty-state {
+      display: grid;
+      place-items: center;
+      min-height: 360px;
+      padding: 26px;
+      color: var(--muted);
+      font-size: 14px;
+      font-weight: 700;
+      text-align: center;
+    }
+
+    @media (max-width: 680px) {
+      body {
+        padding: 16px;
+        place-items: start center;
+      }
+
+      .content {
+        grid-template-columns: 1fr;
+      }
+
+      .controls {
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+        padding: 22px;
+      }
+
+      .swatches {
+        min-height: 240px;
+      }
+
+      .library-toolbar,
+      .preview-caption {
+        align-items: stretch;
+        flex-direction: column;
+      }
+
+      .segmented-control {
+        width: 100%;
+      }
+
+      .tab-button {
+        flex: 1 1 0;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main aria-label="Hex 顏色預覽工具">
+    <div class="toolbar">
+      <div class="traffic-lights" aria-hidden="true">
+        <span></span>
+        <span></span>
+        <span></span>
+      </div>
+      <h1 class="window-title">Hex 顏色預覽工具</h1>
+    </div>
+
+    <section class="content">
+      <div class="controls">
+        <label for="colorInput">輸入 Hex 色碼或色票清單</label>
+        <div class="input-row">
+          <textarea id="colorInput" autocomplete="off" spellcheck="false" inputmode="text">Postcard Cream #F6E8C8
+Milk Tea #C9A77B
+Post Red #B94A48
+Stamp Green #5F7C69
+Warm Ink #3B322B</textarea>
+          <button id="copyButton" type="button" title="複製色碼" aria-label="複製色碼">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true">
+              <rect x="9" y="9" width="11" height="11" rx="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+        </div>
+        <div id="status" class="status" role="status" aria-live="polite"></div>
+
+        <div class="readouts" aria-label="顏色數值">
+          <div class="readout"><span>數量</span><span id="countValue">5 個顏色</span></div>
+          <div class="readout"><span>Hex</span><span id="hexValue">#F6E8C8</span></div>
+          <div class="readout"><span>RGB</span><span id="rgbValue">rgb(246, 232, 200)</span></div>
+        </div>
+
+        <div class="examples" aria-label="範例色票">
+          <p>快速試色</p>
+          <div class="chips">
+            <button class="chip" type="button" data-color="#EF4444" style="background:#EF4444" title="#EF4444" aria-label="套用 #EF4444"></button>
+            <button class="chip" type="button" data-color="#F59E0B" style="background:#F59E0B" title="#F59E0B" aria-label="套用 #F59E0B"></button>
+            <button class="chip" type="button" data-color="#10B981" style="background:#10B981" title="#10B981" aria-label="套用 #10B981"></button>
+            <button class="chip" type="button" data-color="#0EA5E9" style="background:#0EA5E9" title="#0EA5E9" aria-label="套用 #0EA5E9"></button>
+            <button class="chip" type="button" data-color="#8B5CF6" style="background:#8B5CF6" title="#8B5CF6" aria-label="套用 #8B5CF6"></button>
+            <button class="chip" type="button" data-color="#111827" style="background:#111827" title="#111827" aria-label="套用 #111827"></button>
+          </div>
+        </div>
+      </div>
+
+      <aside class="preview-panel" aria-label="顏色預覽清單">
+        <div id="swatches" class="swatches"></div>
+        <div class="preview-caption">
+          <div>
+            <p>目前解析</p>
+            <strong id="captionHex">5 個顏色</strong>
+          </div>
+          <button id="savePaletteButton" class="primary-action" type="button">儲存整個色系</button>
+        </div>
+      </aside>
+    </section>
+
+    <section class="library" aria-label="歷史與收藏">
+      <div class="library-toolbar">
+        <div class="segmented-control" role="tablist" aria-label="紀錄類型">
+          <button id="historyTab" class="tab-button active" type="button" role="tab" aria-selected="true" aria-controls="historyPanel">歷史紀錄 <span id="historyCount">0</span></button>
+          <button id="savedTab" class="tab-button" type="button" role="tab" aria-selected="false" aria-controls="savedPanel">已儲存 <span id="savedCount">0</span></button>
+        </div>
+        <button id="clearHistoryButton" class="secondary-action" type="button">清除歷史</button>
+      </div>
+
+      <div id="historyPanel" class="library-panel" role="tabpanel" aria-labelledby="historyTab">
+        <div id="historyGrid" class="library-grid"></div>
+      </div>
+
+      <div id="savedPanel" class="library-panel" role="tabpanel" aria-labelledby="savedTab" hidden>
+        <section class="library-section">
+          <h2 class="library-heading">單色收藏</h2>
+          <div id="savedColorsGrid" class="library-grid"></div>
+        </section>
+        <section class="library-section">
+          <h2 class="library-heading">已儲存色系</h2>
+          <div id="savedPalettesGrid" class="library-grid"></div>
+        </section>
+      </div>
+    </section>
+  </main>
+
+  <dialog id="nameDialog">
+    <form id="nameForm" class="dialog-content" method="dialog">
+      <h2 id="dialogTitle">儲存名稱</h2>
+      <label for="nameInput">名稱</label>
+      <input id="nameInput" maxlength="60" autocomplete="off">
+      <div class="dialog-actions">
+        <button class="dialog-button cancel" type="button" id="cancelDialogButton">取消</button>
+        <button class="dialog-button" type="submit">確認</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script>
+    const input = document.querySelector("#colorInput");
+    const status = document.querySelector("#status");
+    const swatches = document.querySelector("#swatches");
+    const countValue = document.querySelector("#countValue");
+    const hexValue = document.querySelector("#hexValue");
+    const rgbValue = document.querySelector("#rgbValue");
+    const captionHex = document.querySelector("#captionHex");
+    const copyButton = document.querySelector("#copyButton");
+    const savePaletteButton = document.querySelector("#savePaletteButton");
+    const historyTab = document.querySelector("#historyTab");
+    const savedTab = document.querySelector("#savedTab");
+    const historyPanel = document.querySelector("#historyPanel");
+    const savedPanel = document.querySelector("#savedPanel");
+    const historyGrid = document.querySelector("#historyGrid");
+    const savedColorsGrid = document.querySelector("#savedColorsGrid");
+    const savedPalettesGrid = document.querySelector("#savedPalettesGrid");
+    const historyCount = document.querySelector("#historyCount");
+    const savedCount = document.querySelector("#savedCount");
+    const clearHistoryButton = document.querySelector("#clearHistoryButton");
+    const nameDialog = document.querySelector("#nameDialog");
+    const nameForm = document.querySelector("#nameForm");
+    const nameInput = document.querySelector("#nameInput");
+    const dialogTitle = document.querySelector("#dialogTitle");
+    const cancelDialogButton = document.querySelector("#cancelDialogButton");
+
+    const hexPattern = /#?[0-9a-fA-F]{6}\b|#?[0-9a-fA-F]{3}\b/;
+    const storageKeys = {
+      history: "hex-color-tool-history-v1",
+      colors: "hex-color-tool-saved-colors-v1",
+      palettes: "hex-color-tool-saved-palettes-v1"
+    };
+
+    const commonColors = [
+      ["黑色", "#000000"], ["炭黑", "#333333"], ["灰色", "#808080"],
+      ["銀灰", "#C0C0C0"], ["白色", "#FFFFFF"], ["米白", "#F5F5DC"],
+      ["奶油色", "#FFF4C2"], ["象牙白", "#FFFFF0"], ["奶茶色", "#C9A77B"],
+      ["駝色", "#C19A6B"], ["咖啡色", "#6F4E37"], ["棕色", "#8B4513"],
+      ["紅色", "#FF0000"], ["酒紅", "#800020"], ["磚紅", "#B94A48"],
+      ["珊瑚紅", "#FF7F50"], ["橘色", "#FF8C00"], ["黃色", "#FFD700"],
+      ["芥末黃", "#D4A017"], ["橄欖綠", "#808000"], ["草綠", "#6BBF59"],
+      ["森林綠", "#228B22"], ["墨綠", "#005C3B"], ["鼠尾草綠", "#8A9A5B"],
+      ["薄荷綠", "#98FF98"], ["青色", "#00B7B7"], ["水藍", "#7FDBFF"],
+      ["天藍", "#38BDF8"], ["藍色", "#2563EB"], ["海軍藍", "#000080"],
+      ["靛藍", "#4B0082"], ["紫色", "#800080"], ["薰衣草紫", "#B57EDC"],
+      ["粉紅", "#FFC0CB"], ["桃紅", "#FF69B4"], ["玫瑰色", "#C21E56"]
+    ];
+
+    let currentColors = [];
+    let history = readStorage(storageKeys.history);
+    let savedColors = readStorage(storageKeys.colors);
+    let savedPalettes = readStorage(storageKeys.palettes);
+    let historyTimer = null;
+    let dialogSubmit = null;
+
+    function normalizeHex(value) {
+      const cleaned = value.trim().replace(/^#/, "");
+      if (/^[0-9a-fA-F]{3}$/.test(cleaned)) {
+        return "#" + cleaned.split("").map((part) => part + part).join("").toUpperCase();
+      }
+      if (/^[0-9a-fA-F]{6}$/.test(cleaned)) {
+        return "#" + cleaned.toUpperCase();
+      }
+      return null;
+    }
+
+    function hexToRgb(hex) {
+      const value = hex.slice(1);
+      return {
+        r: parseInt(value.slice(0, 2), 16),
+        g: parseInt(value.slice(2, 4), 16),
+        b: parseInt(value.slice(4, 6), 16)
+      };
+    }
+
+    function readStorage(key) {
+      try {
+        const value = JSON.parse(localStorage.getItem(key));
+        return Array.isArray(value) ? value : [];
+      } catch (error) {
+        return [];
+      }
+    }
+
+    function writeStorage(key, value) {
+      try {
+        localStorage.setItem(key, JSON.stringify(value));
+      } catch (error) {
+        status.textContent = "瀏覽器無法儲存資料，請確認沒有停用本機儲存。";
+        status.classList.add("invalid");
+      }
+    }
+
+    function makeId() {
+      return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    function getCommonName(hex) {
+      const target = hexToRgb(hex);
+      let closestName = "自訂色";
+      let closestDistance = Infinity;
+
+      commonColors.forEach(([name, commonHex]) => {
+        const color = hexToRgb(commonHex);
+        const distance = ((target.r - color.r) ** 2) + ((target.g - color.g) ** 2) + ((target.b - color.b) ** 2);
+        if (distance < closestDistance) {
+          closestDistance = distance;
+          closestName = name;
+        }
+      });
+
+      return closestName;
+    }
+
+    function parseColors(value) {
+      return value
+        .split(/\n|,/)
+        .map((line, index) => {
+          const match = line.match(hexPattern);
+          if (!match) return null;
+          const hex = normalizeHex(match[0]);
+          if (!hex) return null;
+          const name = line.slice(0, match.index).trim().replace(/[-:：]+$/, "").trim();
+          return {
+            hex,
+            name: name || getCommonName(hex),
+            rgb: hexToRgb(hex)
+          };
+        })
+        .filter(Boolean);
+    }
+
+    function escapeHtml(value) {
+      return value.replace(/[&<>"']/g, (character) => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#039;"
+      })[character]);
+    }
+
+    function swatchMarkup(color) {
+      const rgbText = `rgb(${color.rgb.r}, ${color.rgb.g}, ${color.rgb.b})`;
+      const safeName = escapeHtml(color.name);
+      return `
+        <article class="swatch">
+          <div class="swatch-color" style="--swatch-color: ${color.hex}"></div>
+          <div class="swatch-info">
+            <div class="swatch-name" title="${safeName}">${safeName}</div>
+            <div class="swatch-code">${color.hex}</div>
+            <div class="swatch-rgb">${rgbText}</div>
+            <div class="swatch-actions">
+              <button class="small-button" type="button" data-save-color="${color.hex}">收藏單色</button>
+            </div>
+          </div>
+        </article>
+      `;
+    }
+
+    function colorStripMarkup(colors) {
+      return colors.map((color) => `<span style="background:${color.hex}" title="${escapeHtml(color.name)} ${color.hex}"></span>`).join("");
+    }
+
+    function formatDate(timestamp) {
+      return new Intl.DateTimeFormat("zh-TW", {
+        month: "numeric",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit"
+      }).format(new Date(timestamp));
+    }
+
+    function historyTitle(item) {
+      if (item.colors.length === 1) return item.colors[0].name;
+      const names = item.colors.slice(0, 2).map((color) => color.name).join("、");
+      return `${names}等 ${item.colors.length} 色`;
+    }
+
+    function renderHistory() {
+      historyCount.textContent = history.length;
+      clearHistoryButton.disabled = history.length === 0;
+
+      if (history.length === 0) {
+        historyGrid.innerHTML = '<div class="library-empty">顯示過的顏色會自動保留在這裡。</div>';
+        return;
+      }
+
+      historyGrid.innerHTML = history.map((item) => `
+        <article class="library-card">
+          <div class="color-strip">${colorStripMarkup(item.colors)}</div>
+          <div class="library-card-body">
+            <div class="library-card-title" title="${escapeHtml(historyTitle(item))}">${escapeHtml(historyTitle(item))}</div>
+            <div class="library-card-meta">${formatDate(item.createdAt)}</div>
+            <div class="library-card-actions">
+              <button class="small-button" type="button" data-load-history="${item.id}">再次顯示</button>
+              <button class="small-button" type="button" data-delete-history="${item.id}">刪除</button>
+            </div>
+          </div>
+        </article>
+      `).join("");
+    }
+
+    function renderSaved() {
+      savedCount.textContent = savedColors.length + savedPalettes.length;
+
+      savedColorsGrid.innerHTML = savedColors.length ? savedColors.map((item) => `
+        <article class="library-card">
+          <div class="color-strip"><span style="background:${item.hex}"></span></div>
+          <div class="library-card-body">
+            <div class="library-card-title" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
+            <div class="library-card-meta">${item.hex}</div>
+            <div class="library-card-actions">
+              <button class="small-button" type="button" data-load-color="${item.id}">顯示</button>
+              <button class="small-button" type="button" data-rename-color="${item.id}">重新命名</button>
+              <button class="small-button" type="button" data-delete-color="${item.id}">刪除</button>
+            </div>
+          </div>
+        </article>
+      `).join("") : '<div class="library-empty">按色票上的「收藏單色」即可存下來。</div>';
+
+      savedPalettesGrid.innerHTML = savedPalettes.length ? savedPalettes.map((item) => `
+        <article class="library-card">
+          <div class="color-strip">${colorStripMarkup(item.colors)}</div>
+          <div class="library-card-body">
+            <div class="library-card-title" title="${escapeHtml(item.name)}">${escapeHtml(item.name)}</div>
+            <div class="library-card-meta">${item.colors.length} 個顏色</div>
+            <div class="library-card-actions">
+              <button class="small-button" type="button" data-load-palette="${item.id}">載入色系</button>
+              <button class="small-button" type="button" data-rename-palette="${item.id}">重新命名</button>
+              <button class="small-button" type="button" data-delete-palette="${item.id}">刪除</button>
+            </div>
+          </div>
+        </article>
+      `).join("") : '<div class="library-empty">目前整批顏色可以儲存成一個色系。</div>';
+    }
+
+    function recordHistory(colors) {
+      const signature = colors.map((color) => color.hex).join("|");
+      if (history[0] && history[0].signature === signature) return;
+
+      history.unshift({
+        id: makeId(),
+        signature,
+        createdAt: Date.now(),
+        colors: colors.map(({ name, hex }) => ({ name, hex }))
+      });
+      history = history.slice(0, 24);
+      writeStorage(storageKeys.history, history);
+      renderHistory();
+    }
+
+    function scheduleHistory(colors) {
+      clearTimeout(historyTimer);
+      historyTimer = setTimeout(() => recordHistory(colors), 700);
+    }
+
+    function loadColors(colors) {
+      input.value = colors.map((color) => `${color.name} ${color.hex}`).join("\n");
+      input.focus();
+      render();
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    }
+
+    function openNameDialog(title, defaultName, onSubmit) {
+      dialogTitle.textContent = title;
+      nameInput.value = defaultName;
+      dialogSubmit = onSubmit;
+      nameDialog.showModal();
+      nameInput.focus();
+      nameInput.select();
+    }
+
+    function switchLibrary(tabName) {
+      const showHistory = tabName === "history";
+      historyPanel.hidden = !showHistory;
+      savedPanel.hidden = showHistory;
+      historyTab.classList.toggle("active", showHistory);
+      savedTab.classList.toggle("active", !showHistory);
+      historyTab.setAttribute("aria-selected", String(showHistory));
+      savedTab.setAttribute("aria-selected", String(!showHistory));
+      clearHistoryButton.hidden = !showHistory;
+    }
+
+    function render() {
+      const colors = parseColors(input.value);
+      currentColors = colors;
+
+      if (colors.length === 0) {
+        swatches.innerHTML = '<div class="empty-state">貼上像「Postcard Cream #F6E8C8」這樣的內容。</div>';
+        countValue.textContent = "0 個顏色";
+        hexValue.textContent = "-";
+        rgbValue.textContent = "-";
+        captionHex.textContent = "0 個顏色";
+        status.textContent = "沒有找到可解析的 Hex 色碼。";
+        status.classList.add("invalid");
+        savePaletteButton.disabled = true;
+        return;
+      }
+
+      const first = colors[0];
+      swatches.innerHTML = colors.map(swatchMarkup).join("");
+      countValue.textContent = `${colors.length} 個顏色`;
+      hexValue.textContent = colors.map((color) => color.hex).join(", ");
+      rgbValue.textContent = `第一個：rgb(${first.rgb.r}, ${first.rgb.g}, ${first.rgb.b})`;
+      captionHex.textContent = `${colors.length} 個顏色`;
+      status.textContent = `已解析 ${colors.length} 個色碼。`;
+      status.classList.remove("invalid");
+      savePaletteButton.disabled = false;
+      scheduleHistory(colors);
+    }
+
+    input.addEventListener("input", render);
+
+    document.querySelectorAll(".chip").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        input.value = chip.dataset.color;
+        input.focus();
+        render();
+      });
+    });
+
+    copyButton.addEventListener("click", async () => {
+      const colors = parseColors(input.value);
+      if (colors.length === 0) return;
+      const text = colors.map((color) => `${color.name} ${color.hex}`).join("\n");
+      await navigator.clipboard.writeText(text);
+      status.textContent = `已複製 ${colors.length} 個色碼。`;
+      status.classList.remove("invalid");
+    });
+
+    swatches.addEventListener("click", (event) => {
+      const button = event.target.closest("[data-save-color]");
+      if (!button) return;
+      const color = currentColors.find((item) => item.hex === button.dataset.saveColor);
+      if (!color) return;
+      openNameDialog("收藏單色", getCommonName(color.hex), (name) => {
+        savedColors.unshift({ id: makeId(), name, hex: color.hex, createdAt: Date.now() });
+        writeStorage(storageKeys.colors, savedColors);
+        renderSaved();
+        switchLibrary("saved");
+        status.textContent = `已收藏「${name}」。`;
+      });
+    });
+
+    savePaletteButton.addEventListener("click", () => {
+      if (currentColors.length === 0) return;
+      const commonNames = [...new Set(currentColors.slice(0, 2).map((color) => getCommonName(color.hex).replace(/色$/, "")))];
+      const defaultName = `${commonNames.join("、")}色系`;
+      openNameDialog("儲存整個色系", defaultName, (name) => {
+        savedPalettes.unshift({
+          id: makeId(),
+          name,
+          createdAt: Date.now(),
+          colors: currentColors.map(({ name: colorName, hex }) => ({ name: colorName, hex }))
+        });
+        writeStorage(storageKeys.palettes, savedPalettes);
+        renderSaved();
+        switchLibrary("saved");
+        status.textContent = `已儲存色系「${name}」。`;
+      });
+    });
+
+    nameForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      const name = nameInput.value.trim();
+      if (!name || !dialogSubmit) return;
+      const submit = dialogSubmit;
+      dialogSubmit = null;
+      nameDialog.close();
+      submit(name);
+    });
+
+    cancelDialogButton.addEventListener("click", () => {
+      dialogSubmit = null;
+      nameDialog.close();
+    });
+
+    historyTab.addEventListener("click", () => switchLibrary("history"));
+    savedTab.addEventListener("click", () => switchLibrary("saved"));
+
+    historyGrid.addEventListener("click", (event) => {
+      const loadButton = event.target.closest("[data-load-history]");
+      const deleteButton = event.target.closest("[data-delete-history]");
+      if (loadButton) {
+        const item = history.find((entry) => entry.id === loadButton.dataset.loadHistory);
+        if (item) loadColors(item.colors);
+      }
+      if (deleteButton) {
+        history = history.filter((entry) => entry.id !== deleteButton.dataset.deleteHistory);
+        writeStorage(storageKeys.history, history);
+        renderHistory();
+      }
+    });
+
+    savedPanel.addEventListener("click", (event) => {
+      const action = event.target.closest("button[data-load-color], button[data-rename-color], button[data-delete-color], button[data-load-palette], button[data-rename-palette], button[data-delete-palette]");
+      if (!action) return;
+
+      if (action.dataset.loadColor) {
+        const item = savedColors.find((entry) => entry.id === action.dataset.loadColor);
+        if (item) loadColors([{ name: item.name, hex: item.hex }]);
+      }
+      if (action.dataset.renameColor) {
+        const item = savedColors.find((entry) => entry.id === action.dataset.renameColor);
+        if (item) openNameDialog("重新命名單色", item.name, (name) => {
+          item.name = name;
+          writeStorage(storageKeys.colors, savedColors);
+          renderSaved();
+        });
+      }
+      if (action.dataset.deleteColor) {
+        savedColors = savedColors.filter((entry) => entry.id !== action.dataset.deleteColor);
+        writeStorage(storageKeys.colors, savedColors);
+        renderSaved();
+      }
+      if (action.dataset.loadPalette) {
+        const item = savedPalettes.find((entry) => entry.id === action.dataset.loadPalette);
+        if (item) loadColors(item.colors);
+      }
+      if (action.dataset.renamePalette) {
+        const item = savedPalettes.find((entry) => entry.id === action.dataset.renamePalette);
+        if (item) openNameDialog("重新命名色系", item.name, (name) => {
+          item.name = name;
+          writeStorage(storageKeys.palettes, savedPalettes);
+          renderSaved();
+        });
+      }
+      if (action.dataset.deletePalette) {
+        savedPalettes = savedPalettes.filter((entry) => entry.id !== action.dataset.deletePalette);
+        writeStorage(storageKeys.palettes, savedPalettes);
+        renderSaved();
+      }
+    });
+
+    clearHistoryButton.addEventListener("click", () => {
+      if (!history.length || !window.confirm("確定要清除全部歷史紀錄嗎？")) return;
+      history = [];
+      writeStorage(storageKeys.history, history);
+      renderHistory();
+    });
+
+    renderHistory();
+    renderSaved();
+    render();
+  </script>
+</body>
+</html>
