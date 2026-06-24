@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://hex-color-preview-tool.vercel.app/sitemap.xml
