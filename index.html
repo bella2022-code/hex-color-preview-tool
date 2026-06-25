@@ -46,6 +46,10 @@
       box-sizing: border-box;
     }
 
+    [hidden] {
+      display: none !important;
+    }
+
     body {
       margin: 0;
       min-height: 100vh;
@@ -76,6 +80,24 @@
       padding: 0 18px;
       border-bottom: 1px solid var(--line);
       background: #f9fbfc;
+    }
+
+    .account-bar {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      min-width: 0;
+      flex: 0 0 auto;
+    }
+
+    .sync-status {
+      max-width: 210px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
     }
 
     .window-title {
@@ -319,6 +341,7 @@
     .small-button,
     .primary-action,
     .secondary-action,
+    .account-action,
     .tab-button,
     .dialog-button {
       width: auto;
@@ -329,14 +352,16 @@
     }
 
     .small-button,
-    .secondary-action {
+    .secondary-action,
+    .account-action {
       border-color: #b8c5ce;
       background: #ffffff;
       color: #34424c;
     }
 
     .small-button:hover,
-    .secondary-action:hover {
+    .secondary-action:hover,
+    .account-action:hover {
       background: #edf2f4;
     }
 
@@ -519,6 +544,7 @@
     .dialog-actions {
       display: flex;
       justify-content: flex-end;
+      flex-wrap: wrap;
       gap: 8px;
       margin-top: 20px;
     }
@@ -527,6 +553,18 @@
       border-color: #b8c5ce;
       background: #ffffff;
       color: #34424c;
+    }
+
+    .dialog-status {
+      min-height: 18px;
+      margin: 12px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .dialog-status.invalid {
+      color: #b42318;
     }
 
     .empty-state {
@@ -566,6 +604,16 @@
         flex-direction: column;
       }
 
+      .toolbar {
+        align-items: stretch;
+        flex-direction: column;
+        padding: 12px 18px;
+      }
+
+      .account-bar {
+        justify-content: space-between;
+      }
+
       .segmented-control {
         width: 100%;
       }
@@ -585,6 +633,11 @@
         <span></span>
       </div>
       <h1 class="window-title">Hex 顏色預覽工具</h1>
+      <div class="account-bar" aria-label="帳號與同步">
+        <span id="syncStatus" class="sync-status">本機儲存</span>
+        <button id="accountButton" class="account-action" type="button">登入 / 註冊</button>
+        <button id="logoutButton" class="account-action" type="button" hidden>登出</button>
+      </div>
     </div>
 
     <section class="content">
@@ -674,7 +727,40 @@ Warm Ink #3B322B</textarea>
     </form>
   </dialog>
 
-  <script>
+  <dialog id="accountDialog">
+    <form id="accountForm" class="dialog-content" method="dialog">
+      <h2>帳號同步</h2>
+      <label for="accountEmail">Email</label>
+      <input id="accountEmail" type="email" autocomplete="email">
+      <label for="accountPassword">密碼</label>
+      <input id="accountPassword" type="password" minlength="6" autocomplete="current-password">
+      <div id="accountStatus" class="dialog-status" role="status" aria-live="polite"></div>
+      <div class="dialog-actions">
+        <button class="dialog-button cancel" type="button" id="cancelAccountButton">取消</button>
+        <button class="dialog-button" type="button" id="loginButton">登入</button>
+        <button class="dialog-button" type="button" id="createAccountButton">建立帳號</button>
+      </div>
+    </form>
+  </dialog>
+
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-app.js";
+    import {
+      createUserWithEmailAndPassword,
+      getAuth,
+      onAuthStateChanged,
+      signInWithEmailAndPassword,
+      signOut
+    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-auth.js";
+    import {
+      collection,
+      deleteDoc,
+      doc,
+      getDocs,
+      getFirestore,
+      setDoc
+    } from "https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore.js";
+
     const input = document.querySelector("#colorInput");
     const status = document.querySelector("#status");
     const swatches = document.querySelector("#swatches");
@@ -699,12 +785,37 @@ Warm Ink #3B322B</textarea>
     const nameInput = document.querySelector("#nameInput");
     const dialogTitle = document.querySelector("#dialogTitle");
     const cancelDialogButton = document.querySelector("#cancelDialogButton");
+    const syncStatus = document.querySelector("#syncStatus");
+    const accountButton = document.querySelector("#accountButton");
+    const logoutButton = document.querySelector("#logoutButton");
+    const accountDialog = document.querySelector("#accountDialog");
+    const accountForm = document.querySelector("#accountForm");
+    const accountEmail = document.querySelector("#accountEmail");
+    const accountPassword = document.querySelector("#accountPassword");
+    const accountStatus = document.querySelector("#accountStatus");
+    const cancelAccountButton = document.querySelector("#cancelAccountButton");
+    const loginButton = document.querySelector("#loginButton");
+    const createAccountButton = document.querySelector("#createAccountButton");
+
+    const firebaseConfig = {
+      apiKey: "AIzaSyB6624vmNjfIbrQ6WZZesLxgDps3LwT_BM",
+      authDomain: "hex-color-preview-tool.firebaseapp.com",
+      projectId: "hex-color-preview-tool",
+      storageBucket: "hex-color-preview-tool.firebasestorage.app",
+      messagingSenderId: "263030262620",
+      appId: "1:263030262620:web:b6ca8480329bd913a54f99"
+    };
 
     const hexPattern = /#?[0-9a-fA-F]{6}\b|#?[0-9a-fA-F]{3}\b/;
     const storageKeys = {
       history: "hex-color-tool-history-v1",
       colors: "hex-color-tool-saved-colors-v1",
       palettes: "hex-color-tool-saved-palettes-v1"
+    };
+    const cloudCollections = {
+      [storageKeys.history]: "history",
+      [storageKeys.colors]: "savedColors",
+      [storageKeys.palettes]: "savedPalettes"
     };
 
     const commonColors = [
@@ -728,6 +839,12 @@ Warm Ink #3B322B</textarea>
     let savedPalettes = readStorage(storageKeys.palettes);
     let historyTimer = null;
     let dialogSubmit = null;
+    let firebaseApp = null;
+    let auth = null;
+    let db = null;
+    let currentUser = null;
+    let isCloudHydrating = false;
+    let syncTimer = null;
 
     function normalizeHex(value) {
       const cleaned = value.trim().replace(/^#/, "");
@@ -761,10 +878,153 @@ Warm Ink #3B322B</textarea>
     function writeStorage(key, value) {
       try {
         localStorage.setItem(key, JSON.stringify(value));
+        if (!isCloudHydrating) queueCloudSync(key, value);
       } catch (error) {
         status.textContent = "瀏覽器無法儲存資料，請確認沒有停用本機儲存。";
         status.classList.add("invalid");
       }
+    }
+
+    function hasFirebaseConfig() {
+      return Boolean(firebaseConfig.apiKey && firebaseConfig.appId && firebaseConfig.messagingSenderId);
+    }
+
+    function updateAccountUi(message = "") {
+      const hasUser = Boolean(currentUser);
+      accountButton.textContent = hasUser ? currentUser.email : "登入 / 註冊";
+      logoutButton.hidden = !hasUser;
+
+      if (!hasFirebaseConfig()) {
+        syncStatus.textContent = "雲端設定待完成";
+        return;
+      }
+
+      syncStatus.textContent = message || (hasUser ? "雲端同步中" : "本機儲存");
+    }
+
+    function setAccountStatus(message, invalid = false) {
+      accountStatus.textContent = message;
+      accountStatus.classList.toggle("invalid", invalid);
+    }
+
+    function cloneForStorage(item) {
+      return JSON.parse(JSON.stringify(item));
+    }
+
+    function normalizeCloudItem(item) {
+      const normalized = { ...item };
+      delete normalized.syncedAt;
+      return normalized;
+    }
+
+    function sortNewestFirst(items) {
+      return items.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+    }
+
+    function mergeCollections(localItems, cloudItems) {
+      const merged = new Map();
+      [...cloudItems, ...localItems].forEach((item) => {
+        if (!item || !item.id) return;
+        const existing = merged.get(item.id);
+        if (!existing || (item.createdAt || 0) >= (existing.createdAt || 0)) {
+          merged.set(item.id, normalizeCloudItem(item));
+        }
+      });
+      return sortNewestFirst([...merged.values()]);
+    }
+
+    function getCurrentCollections() {
+      return {
+        [storageKeys.history]: history,
+        [storageKeys.colors]: savedColors,
+        [storageKeys.palettes]: savedPalettes
+      };
+    }
+
+    function queueCloudSync(key, value) {
+      if (!currentUser || !db || !cloudCollections[key]) return;
+      clearTimeout(syncTimer);
+      syncTimer = setTimeout(() => {
+        const collections = getCurrentCollections();
+        const pending = value ? { [key]: value } : collections;
+        syncCollectionsToCloud(pending);
+      }, 450);
+    }
+
+    async function syncCollectionsToCloud(collections) {
+      if (!currentUser || !db) return;
+      updateAccountUi("正在同步");
+      try {
+        await Promise.all(Object.entries(collections).map(([key, items]) => syncCollectionToCloud(key, items)));
+        updateAccountUi("已同步");
+      } catch (error) {
+        updateAccountUi("雲端同步失敗");
+      }
+    }
+
+    async function syncCollectionToCloud(key, items) {
+      const collectionName = cloudCollections[key];
+      if (!collectionName) return;
+      const collectionRef = collection(db, "users", currentUser.uid, collectionName);
+      const snapshot = await getDocs(collectionRef);
+      const localIds = new Set(items.map((item) => item.id));
+      const deletions = snapshot.docs
+        .filter((entry) => !localIds.has(entry.id))
+        .map((entry) => deleteDoc(entry.ref));
+      const writes = items.map((item) => setDoc(doc(collectionRef, item.id), {
+        ...cloneForStorage(item),
+        syncedAt: Date.now()
+      }));
+      await Promise.all([...deletions, ...writes]);
+    }
+
+    async function readCloudCollection(collectionName) {
+      const snapshot = await getDocs(collection(db, "users", currentUser.uid, collectionName));
+      return snapshot.docs.map((entry) => normalizeCloudItem({ id: entry.id, ...entry.data() }));
+    }
+
+    async function hydrateCloudData() {
+      if (!currentUser || !db) return;
+      updateAccountUi("讀取雲端");
+      try {
+        const [cloudHistory, cloudColors, cloudPalettes] = await Promise.all([
+          readCloudCollection("history"),
+          readCloudCollection("savedColors"),
+          readCloudCollection("savedPalettes")
+        ]);
+
+        isCloudHydrating = true;
+        history = mergeCollections(history, cloudHistory).slice(0, 24);
+        savedColors = mergeCollections(savedColors, cloudColors);
+        savedPalettes = mergeCollections(savedPalettes, cloudPalettes);
+        writeStorage(storageKeys.history, history);
+        writeStorage(storageKeys.colors, savedColors);
+        writeStorage(storageKeys.palettes, savedPalettes);
+        isCloudHydrating = false;
+
+        renderHistory();
+        renderSaved();
+        await syncCollectionsToCloud(getCurrentCollections());
+      } catch (error) {
+        isCloudHydrating = false;
+        updateAccountUi("雲端讀取失敗");
+      }
+    }
+
+    function initializeFirebase() {
+      if (!hasFirebaseConfig()) {
+        updateAccountUi();
+        return;
+      }
+
+      firebaseApp = initializeApp(firebaseConfig);
+      auth = getAuth(firebaseApp);
+      db = getFirestore(firebaseApp);
+      onAuthStateChanged(auth, async (user) => {
+        currentUser = user;
+        updateAccountUi(user ? "正在同步" : "本機儲存");
+        if (user) await hydrateCloudData();
+      });
     }
 
     function makeId() {
@@ -958,6 +1218,56 @@ Warm Ink #3B322B</textarea>
       clearHistoryButton.hidden = !showHistory;
     }
 
+    function openAccountDialog() {
+      if (!hasFirebaseConfig()) {
+        accountDialog.showModal();
+        setAccountStatus("Firebase Web App config 還沒接上；目前先使用本機儲存。", true);
+        accountEmail.focus();
+        return;
+      }
+
+      setAccountStatus("登入後會把這台裝置的色票合併到雲端。");
+      accountDialog.showModal();
+      accountEmail.focus();
+    }
+
+    async function submitAccount(mode) {
+      if (!hasFirebaseConfig() || !auth) {
+        setAccountStatus("Firebase Web App config 還沒接上，暫時無法建立雲端帳號。", true);
+        return;
+      }
+
+      const email = accountEmail.value.trim();
+      const password = accountPassword.value;
+      if (!email || password.length < 6) {
+        setAccountStatus("請輸入 Email，密碼至少 6 個字。", true);
+        return;
+      }
+
+      setAccountStatus(mode === "create" ? "正在建立帳號..." : "正在登入...");
+      loginButton.disabled = true;
+      createAccountButton.disabled = true;
+      try {
+        if (mode === "create") {
+          await createUserWithEmailAndPassword(auth, email, password);
+        } else {
+          await signInWithEmailAndPassword(auth, email, password);
+        }
+        accountPassword.value = "";
+        accountDialog.close();
+      } catch (error) {
+        const message = error.code === "auth/email-already-in-use"
+          ? "這個 Email 已經註冊過，可以直接登入。"
+          : error.code === "auth/invalid-credential"
+            ? "Email 或密碼不正確。"
+            : "帳號操作失敗，請稍後再試。";
+        setAccountStatus(message, true);
+      } finally {
+        loginButton.disabled = false;
+        createAccountButton.disabled = false;
+      }
+    }
+
     function render() {
       const colors = parseColors(input.value);
       currentColors = colors;
@@ -1052,6 +1362,27 @@ Warm Ink #3B322B</textarea>
       nameDialog.close();
     });
 
+    accountButton.addEventListener("click", openAccountDialog);
+
+    logoutButton.addEventListener("click", async () => {
+      if (!auth) return;
+      await signOut(auth);
+      status.textContent = "已登出，接下來會使用本機儲存。";
+      status.classList.remove("invalid");
+    });
+
+    cancelAccountButton.addEventListener("click", () => {
+      accountDialog.close();
+    });
+
+    loginButton.addEventListener("click", () => submitAccount("login"));
+    createAccountButton.addEventListener("click", () => submitAccount("create"));
+
+    accountForm.addEventListener("submit", (event) => {
+      event.preventDefault();
+      submitAccount("login");
+    });
+
     historyTab.addEventListener("click", () => switchLibrary("history"));
     savedTab.addEventListener("click", () => switchLibrary("saved"));
 
@@ -1119,6 +1450,7 @@ Warm Ink #3B322B</textarea>
     renderHistory();
     renderSaved();
     render();
+    initializeFirebase();
   </script>
 </body>
 </html>
