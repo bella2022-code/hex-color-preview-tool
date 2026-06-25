@@ -2,6 +2,8 @@ import SwiftUI
 
 private let firebaseApiKey = "AIzaSyB6624vmNjfIbrQ6WZZesLxgDps3LwT_BM"
 private let firebaseProjectId = "hex-color-preview-tool"
+private let appGroupIdentifier = "group.com.bella.hexcolorpreview"
+private let sharedImportKey = "sharedImportedPalettes"
 
 struct ColorItem: Codable, Identifiable, Hashable {
     var id = UUID().uuidString
@@ -151,6 +153,7 @@ struct ContentView: View {
                     .presentationDetents([.medium])
             }
             .task {
+                importSharedPalettes()
                 recordHistory()
                 if session != nil {
                     await syncFromCloud()
@@ -232,6 +235,22 @@ struct ContentView: View {
         history.insert(HistoryItem(id: makeId(), signature: signature, createdAt: now(), colors: colors), at: 0)
         history = Array(history.prefix(24))
         Store.save(history, key: "history")
+    }
+
+    private func importSharedPalettes() {
+        guard let defaults = UserDefaults(suiteName: appGroupIdentifier),
+              let data = defaults.data(forKey: sharedImportKey),
+              let imported = try? JSONDecoder().decode([ColorPalette].self, from: data),
+              !imported.isEmpty else {
+            return
+        }
+
+        savedPalettes = merge(savedPalettes, imported)
+        Store.save(savedPalettes, key: "savedPalettes")
+        defaults.removeObject(forKey: sharedImportKey)
+        selectedTab = 2
+        message = "已匯入 \(imported.count) 組分享色系"
+        Task { await syncToCloud() }
     }
 
     private func authenticate(create: Bool) async {
