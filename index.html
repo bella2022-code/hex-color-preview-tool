@@ -567,6 +567,34 @@
       color: #b42318;
     }
 
+    .password-field {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .password-field input {
+      width: 100%;
+    }
+
+    .password-toggle {
+      min-height: 44px;
+      padding: 0 12px;
+      border: 1px solid #b8c5ce;
+      border-radius: 8px;
+      background: #ffffff;
+      color: #34424c;
+      cursor: pointer;
+      font: inherit;
+      font-size: 13px;
+      font-weight: 800;
+    }
+
+    .password-toggle:hover {
+      background: #edf2f4;
+    }
+
     .empty-state {
       display: grid;
       place-items: center;
@@ -733,7 +761,10 @@ Warm Ink #3B322B</textarea>
       <label for="accountEmail">Email</label>
       <input id="accountEmail" type="email" autocomplete="email">
       <label for="accountPassword">密碼</label>
-      <input id="accountPassword" type="password" minlength="6" autocomplete="current-password">
+      <div class="password-field">
+        <input id="accountPassword" type="password" minlength="6" autocomplete="current-password">
+        <button id="togglePasswordButton" class="password-toggle" type="button" aria-pressed="false">顯示</button>
+      </div>
       <div id="accountStatus" class="dialog-status" role="status" aria-live="polite"></div>
       <div class="dialog-actions">
         <button class="dialog-button cancel" type="button" id="cancelAccountButton">取消</button>
@@ -796,6 +827,7 @@ Warm Ink #3B322B</textarea>
     const cancelAccountButton = document.querySelector("#cancelAccountButton");
     const loginButton = document.querySelector("#loginButton");
     const createAccountButton = document.querySelector("#createAccountButton");
+    const togglePasswordButton = document.querySelector("#togglePasswordButton");
 
     const firebaseConfig = {
       apiKey: "AIzaSyB6624vmNjfIbrQ6WZZesLxgDps3LwT_BM",
@@ -1373,6 +1405,14 @@ Warm Ink #3B322B</textarea>
 
     cancelAccountButton.addEventListener("click", () => {
       accountDialog.close();
+    });
+
+    togglePasswordButton.addEventListener("click", () => {
+      const isVisible = accountPassword.type === "text";
+      accountPassword.type = isVisible ? "password" : "text";
+      togglePasswordButton.textContent = isVisible ? "顯示" : "隱藏";
+      togglePasswordButton.setAttribute("aria-pressed", String(!isVisible));
+      accountPassword.focus();
     });
 
     loginButton.addEventListener("click", () => submitAccount("login"));

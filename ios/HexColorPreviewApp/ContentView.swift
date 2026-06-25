@@ -69,6 +69,7 @@ struct ContentView: View {
     @State private var session: AuthSession? = Store.loadSession()
     @State private var email = ""
     @State private var password = ""
+    @State private var showPassword = false
     @State private var message = "本機儲存"
     @State private var showAccount = false
     @State private var selectedTab = 0
@@ -184,8 +185,24 @@ struct ContentView: View {
                             .textContentType(.emailAddress)
                             .keyboardType(.emailAddress)
                             .textInputAutocapitalization(.never)
-                        SecureField("密碼", text: $password)
+                        HStack {
+                            Group {
+                                if showPassword {
+                                    TextField("密碼", text: $password)
+                                } else {
+                                    SecureField("密碼", text: $password)
+                                }
+                            }
                             .textContentType(.password)
+
+                            Button {
+                                showPassword.toggle()
+                            } label: {
+                                Image(systemName: showPassword ? "eye.slash" : "eye")
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel(showPassword ? "隱藏密碼" : "顯示密碼")
+                        }
                         Button("登入") {
                             Task { await authenticate(create: false) }
                         }
