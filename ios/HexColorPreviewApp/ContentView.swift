@@ -4,6 +4,7 @@ private let firebaseApiKey = "AIzaSyB6624vmNjfIbrQ6WZZesLxgDps3LwT_BM"
 private let firebaseProjectId = "hex-color-preview-tool"
 private let appGroupIdentifier = "group.com.chartgreen.hexcolorpreview"
 private let sharedImportKey = "sharedImportedPalettes"
+private let sharedPendingKey = "sharedPendingPalettes"
 
 struct ColorItem: Codable, Identifiable, Hashable {
     var id = UUID().uuidString
@@ -73,9 +74,31 @@ struct ContentView: View {
     @State private var message = "本機儲存"
     @State private var showAccount = false
     @State private var selectedTab = 0
+    @State private var searchQuery = ""
+    @State private var renameTarget: RenameTarget?
+    @State private var renameText = ""
+    @State private var deleteTarget: DeleteTarget?
+    @State private var pendingSharedPalettes: [ColorPalette] = []
+    @State private var showSharedImport = false
 
     private var parsedColors: [ColorItem] {
         ColorParser.parse(input)
+    }
+
+    private var filteredSavedColors: [SavedColor] {
+        guard !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return savedColors
+        }
+        return savedColors.filter { matchesSearch([$0.name, $0.hex]) }
+    }
+
+    private var filteredSavedPalettes: [ColorPalette] {
+        guard !searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            return savedPalettes
+        }
+        return savedPalettes.filter { palette in
+            matchesSearch([palette.name] + palette.colors.flatMap { [$0.name, $0.hex] })
+        }
     }
 
     var body: some View {
@@ -111,6 +134,11 @@ struct ContentView: View {
                     }
                     .pickerStyle(.segmented)
 
+                    if selectedTab != 0 {
+                        TextField("搜尋名稱或 Hex", text: $searchQuery)
+                            .textInputAutocapitalization(.never)
+                    }
+
                     if selectedTab == 0 {
                         ForEach(history) { item in
                             PaletteSummary(title: historyTitle(item.colors), colors: item.colors) {
@@ -118,15 +146,33 @@ struct ContentView: View {
                             }
                         }
                     } else if selectedTab == 1 {
-                        ForEach(savedColors) { item in
+                        ForEach(filteredSavedColors) { item in
                             ColorRow(item: ColorItem(name: item.name, hex: item.hex), buttonTitle: "載入") {
                                 input = "\(item.name) \(item.hex)"
                             }
+                            .contextMenu {
+                                Button("重新命名") { startRename(.color(item)) }
+                                Button("刪除", role: .destructive) { deleteTarget = .color(item) }
+                            }
+                            .swipeActions {
+                                Button("刪除", role: .destructive) { deleteTarget = .color(item) }
+                                Button("重新命名") { startRename(.color(item)) }
+                                    .tint(.blue)
+                            }
                         }
                     } else {
-                        ForEach(savedPalettes) { palette in
+                        ForEach(filteredSavedPalettes) { palette in
                             PaletteSummary(title: palette.name, colors: palette.colors) {
                                 input = palette.colors.map { "\($0.name) \($0.hex)" }.joined(separator: "\n")
+                            }
+                            .contextMenu {
+                                Button("重新命名") { startRename(.palette(palette)) }
+                                Button("刪除", role: .destructive) { deleteTarget = .palette(palette) }
+                            }
+                            .swipeActions {
+                                Button("刪除", role: .destructive) { deleteTarget = .palette(palette) }
+                                Button("重新命名") { startRename(.palette(palette)) }
+                                    .tint(.blue)
                             }
                         }
                     }
@@ -152,6 +198,20 @@ struct ContentView: View {
             .sheet(isPresented: $showAccount) {
                 accountView
                     .presentationDetents([.medium])
+            }
+            .sheet(item: $renameTarget) { target in
+                renameView(target)
+                    .presentationDetents([.height(220)])
+            }
+            .sheet(isPresented: $showSharedImport) {
+                sharedImportView
+                    .presentationDetents([.medium])
+            }
+            .alert("刪除收藏？", isPresented: deleteAlertBinding) {
+                Button("取消", role: .cancel) { deleteTarget = nil }
+                Button("刪除", role: .destructive) { confirmDelete() }
+            } message: {
+                Text(deleteTarget?.title ?? "")
             }
             .task {
                 importSharedPalettes()
@@ -209,6 +269,10 @@ struct ContentView: View {
                         Button("建立帳號") {
                             Task { await authenticate(create: true) }
                         }
+                        Button("忘記密碼") {
+                            Task { await resetPassword() }
+                        }
+                        .disabled(email.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                     Text("登入後會把這台 iPhone 的色票合併到 Firebase，網站版也能讀到。")
                         .font(.footnote)
@@ -219,6 +283,52 @@ struct ContentView: View {
             .toolbar {
                 ToolbarItem(placement: .cancellationAction) {
                     Button("關閉") { showAccount = false }
+                }
+            }
+        }
+    }
+
+    private func renameView(_ target: RenameTarget) -> some View {
+        NavigationStack {
+            Form {
+                TextField("名稱", text: $renameText)
+                    .textInputAutocapitalization(.words)
+            }
+            .navigationTitle("重新命名")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("取消") { renameTarget = nil }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("儲存") { confirmRename(target) }
+                        .disabled(renameText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+        }
+    }
+
+    private var sharedImportView: some View {
+        NavigationStack {
+            List {
+                Section("分享偵測到的色系") {
+                    ForEach(pendingSharedPalettes) { palette in
+                        PaletteSummary(title: palette.name, colors: palette.colors) {
+                            input = palette.colors.map { "\($0.name) \($0.hex)" }.joined(separator: "\n")
+                        }
+                    }
+                }
+            }
+            .navigationTitle("確認儲存")
+            .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    Button("略過") {
+                        pendingSharedPalettes = []
+                        showSharedImport = false
+                    }
+                }
+                ToolbarItem(placement: .confirmationAction) {
+                    Button("全部儲存") { confirmSharedImport() }
+                        .disabled(pendingSharedPalettes.isEmpty)
                 }
             }
         }
@@ -255,19 +365,29 @@ struct ContentView: View {
     }
 
     private func importSharedPalettes() {
-        guard let defaults = UserDefaults(suiteName: appGroupIdentifier),
-              let data = defaults.data(forKey: sharedImportKey),
-              let imported = try? JSONDecoder().decode([ColorPalette].self, from: data),
-              !imported.isEmpty else {
+        guard let defaults = UserDefaults(suiteName: appGroupIdentifier) else {
             return
         }
 
-        savedPalettes = merge(savedPalettes, imported)
-        Store.save(savedPalettes, key: "savedPalettes")
-        defaults.removeObject(forKey: sharedImportKey)
-        selectedTab = 2
-        message = "已匯入 \(imported.count) 組分享色系"
-        Task { await syncToCloud() }
+        if let data = defaults.data(forKey: sharedPendingKey),
+           let pending = try? JSONDecoder().decode([ColorPalette].self, from: data),
+           !pending.isEmpty {
+            pendingSharedPalettes = pending
+            defaults.removeObject(forKey: sharedPendingKey)
+            showSharedImport = true
+            message = "分享偵測到 \(pending.count) 組色系"
+        }
+
+        if let data = defaults.data(forKey: sharedImportKey),
+           let imported = try? JSONDecoder().decode([ColorPalette].self, from: data),
+           !imported.isEmpty {
+            savedPalettes = merge(savedPalettes, imported)
+            Store.save(savedPalettes, key: "savedPalettes")
+            defaults.removeObject(forKey: sharedImportKey)
+            selectedTab = 2
+            message = "已匯入 \(imported.count) 組分享色系"
+            Task { await syncToCloud() }
+        }
     }
 
     private func authenticate(create: Bool) async {
@@ -285,7 +405,23 @@ struct ContentView: View {
             showAccount = false
             await syncFromCloud()
         } catch {
-            message = "帳號操作失敗，請稍後再試"
+            message = accountMessage(for: error)
+        }
+    }
+
+    private func resetPassword() async {
+        let trimmedEmail = email.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedEmail.isEmpty else {
+            message = "請先輸入 Email"
+            return
+        }
+
+        do {
+            message = "正在寄出重設信..."
+            try await FirebaseClient.resetPassword(email: trimmedEmail)
+            message = "已寄出密碼重設信"
+        } catch {
+            message = accountMessage(for: error)
         }
     }
 
@@ -319,6 +455,104 @@ struct ContentView: View {
             message = "已同步"
         } catch {
             message = "雲端同步失敗"
+        }
+    }
+
+    private var deleteAlertBinding: Binding<Bool> {
+        Binding(
+            get: { deleteTarget != nil },
+            set: { if !$0 { deleteTarget = nil } }
+        )
+    }
+
+    private func startRename(_ target: RenameTarget) {
+        renameText = target.title
+        renameTarget = target
+    }
+
+    private func confirmRename(_ target: RenameTarget) {
+        let name = renameText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+
+        switch target {
+        case .color(let item):
+            guard let index = savedColors.firstIndex(where: { $0.id == item.id }) else { return }
+            savedColors[index].name = name
+            Store.save(savedColors, key: "savedColors")
+            message = "已重新命名單色"
+        case .palette(let item):
+            guard let index = savedPalettes.firstIndex(where: { $0.id == item.id }) else { return }
+            savedPalettes[index].name = name
+            Store.save(savedPalettes, key: "savedPalettes")
+            message = "已重新命名色系"
+        }
+
+        renameTarget = nil
+        Task { await syncToCloud() }
+    }
+
+    private func confirmDelete() {
+        guard let deleteTarget else { return }
+
+        switch deleteTarget {
+        case .color(let item):
+            savedColors.removeAll { $0.id == item.id }
+            Store.save(savedColors, key: "savedColors")
+            message = "已刪除單色"
+            Task { await FirebaseClient.deleteIfPossible("savedColors", id: item.id, session: session) }
+        case .palette(let item):
+            savedPalettes.removeAll { $0.id == item.id }
+            Store.save(savedPalettes, key: "savedPalettes")
+            message = "已刪除色系"
+            Task { await FirebaseClient.deleteIfPossible("savedPalettes", id: item.id, session: session) }
+        }
+
+        self.deleteTarget = nil
+    }
+
+    private func confirmSharedImport() {
+        savedPalettes = merge(savedPalettes, pendingSharedPalettes)
+        Store.save(savedPalettes, key: "savedPalettes")
+        selectedTab = 2
+        message = "已儲存分享色系"
+        pendingSharedPalettes = []
+        showSharedImport = false
+        Task { await syncToCloud() }
+    }
+
+    private func matchesSearch(_ values: [String]) -> Bool {
+        let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        return values.contains { $0.lowercased().contains(query) }
+    }
+}
+
+enum RenameTarget: Identifiable {
+    case color(SavedColor)
+    case palette(ColorPalette)
+
+    var id: String {
+        switch self {
+        case .color(let item): "color-\(item.id)"
+        case .palette(let item): "palette-\(item.id)"
+        }
+    }
+
+    var title: String {
+        switch self {
+        case .color(let item): item.name
+        case .palette(let item): item.name
+        }
+    }
+}
+
+enum DeleteTarget {
+    case color(SavedColor)
+    case palette(ColorPalette)
+
+    var title: String {
+        switch self {
+        case .color(let item): "\(item.name) \(item.hex)"
+        case .palette(let item): "\(item.name)，共 \(item.colors.count) 個顏色"
         }
     }
 }
@@ -414,9 +648,27 @@ enum FirebaseClient {
         ])
 
         let (data, response) = try await URLSession.shared.data(for: request)
-        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw URLError(.userAuthenticationRequired) }
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            throw firebaseError(from: data)
+        }
         let decoded = try JSONDecoder().decode(AuthResponse.self, from: data)
         return AuthSession(email: decoded.email, localId: decoded.localId, idToken: decoded.idToken)
+    }
+
+    static func resetPassword(email: String) async throws {
+        let url = URL(string: "https://identitytoolkit.googleapis.com/v1/accounts:sendOobCode?key=\(firebaseApiKey)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: [
+            "requestType": "PASSWORD_RESET",
+            "email": email
+        ])
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            throw firebaseError(from: data)
+        }
     }
 
     static func upload<T: Codable & Identifiable>(_ items: [T], collection: String, session: AuthSession) async throws where T.ID == String {
@@ -442,6 +694,21 @@ enum FirebaseClient {
         return try FirestoreCodec.decodeList(T.self, from: data)
     }
 
+    static func delete(_ collection: String, id: String, session: AuthSession) async throws {
+        let url = firestoreURL("users/\(session.localId)/\(collection)/\(id)")
+        var request = authorizedRequest(url, session: session)
+        request.httpMethod = "DELETE"
+        let (_, response) = try await URLSession.shared.data(for: request)
+        guard [200, 404].contains((response as? HTTPURLResponse)?.statusCode ?? 0) else {
+            throw URLError(.cannotRemoveFile)
+        }
+    }
+
+    static func deleteIfPossible(_ collection: String, id: String, session: AuthSession?) async {
+        guard let session else { return }
+        try? await delete(collection, id: id, session: session)
+    }
+
     private static func firestoreURL(_ path: String) -> URL {
         URL(string: "https://firestore.googleapis.com/v1/projects/\(firebaseProjectId)/databases/(default)/documents/\(path)")!
     }
@@ -452,12 +719,31 @@ enum FirebaseClient {
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
         return request
     }
+
+    private static func firebaseError(from data: Data) -> Error {
+        if let decoded = try? JSONDecoder().decode(FirebaseErrorResponse.self, from: data) {
+            return FirebaseAuthError(code: decoded.error.message)
+        }
+        return URLError(.badServerResponse)
+    }
 }
 
 struct AuthResponse: Codable {
     var email: String
     var localId: String
     var idToken: String
+}
+
+struct FirebaseErrorResponse: Codable {
+    struct Body: Codable {
+        var message: String
+    }
+
+    var error: Body
+}
+
+struct FirebaseAuthError: LocalizedError {
+    var code: String
 }
 
 enum FirestoreCodec {
@@ -574,6 +860,27 @@ private func rgbText(_ hex: String) -> String {
     var number: UInt64 = 0
     scanner.scanHexInt64(&number)
     return "rgb(\((number >> 16) & 0xff), \((number >> 8) & 0xff), \(number & 0xff))"
+}
+
+private func accountMessage(for error: Error) -> String {
+    guard let error = error as? FirebaseAuthError else {
+        return "帳號操作失敗，請稍後再試"
+    }
+
+    switch error.code {
+    case "EMAIL_EXISTS":
+        return "這個 Email 已經註冊過"
+    case "EMAIL_NOT_FOUND":
+        return "找不到這個 Email"
+    case "INVALID_LOGIN_CREDENTIALS", "INVALID_PASSWORD":
+        return "Email 或密碼不正確"
+    case "WEAK_PASSWORD : Password should be at least 6 characters":
+        return "密碼至少要 6 個字"
+    case "INVALID_EMAIL":
+        return "Email 格式不正確"
+    default:
+        return "帳號操作失敗：\(error.code)"
+    }
 }
 
 private func commonName(_ hex: String) -> String {

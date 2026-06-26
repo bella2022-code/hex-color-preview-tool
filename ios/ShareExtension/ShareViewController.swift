@@ -3,7 +3,7 @@ import UniformTypeIdentifiers
 
 final class ShareViewController: SLComposeServiceViewController {
     private let groupIdentifier = "group.com.chartgreen.hexcolorpreview"
-    private let sharedImportKey = "sharedImportedPalettes"
+    private let sharedPendingKey = "sharedPendingPalettes"
 
     override func isContentValid() -> Bool {
         true
@@ -15,7 +15,7 @@ final class ShareViewController: SLComposeServiceViewController {
             let colors = ColorParser.parse(sharedText)
 
             if !colors.isEmpty {
-                savePalette(colors)
+                queuePaletteForConfirmation(colors)
             }
 
             extensionContext?.completeRequest(returningItems: [], completionHandler: nil)
@@ -64,7 +64,7 @@ final class ShareViewController: SLComposeServiceViewController {
         }
     }
 
-    private func savePalette(_ colors: [ColorItem]) {
+    private func queuePaletteForConfirmation(_ colors: [ColorItem]) {
         guard let defaults = UserDefaults(suiteName: groupIdentifier) else { return }
         var palettes = loadPalettes(defaults)
         palettes.insert(
@@ -76,11 +76,11 @@ final class ShareViewController: SLComposeServiceViewController {
             ),
             at: 0
         )
-        defaults.set(try? JSONEncoder().encode(palettes), forKey: sharedImportKey)
+        defaults.set(try? JSONEncoder().encode(palettes), forKey: sharedPendingKey)
     }
 
     private func loadPalettes(_ defaults: UserDefaults) -> [SharedPalette] {
-        guard let data = defaults.data(forKey: sharedImportKey) else { return [] }
+        guard let data = defaults.data(forKey: sharedPendingKey) else { return [] }
         return (try? JSONDecoder().decode([SharedPalette].self, from: data)) ?? []
     }
 }
