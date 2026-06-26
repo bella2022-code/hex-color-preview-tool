@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 private let firebaseApiKey = "AIzaSyB6624vmNjfIbrQ6WZZesLxgDps3LwT_BM"
 private let firebaseProjectId = "hex-color-preview-tool"
@@ -80,9 +81,18 @@ struct ContentView: View {
     @State private var deleteTarget: DeleteTarget?
     @State private var pendingSharedPalettes: [ColorPalette] = []
     @State private var showSharedImport = false
+    @State private var selectedMode = 0
+    @State private var pickedImage: UIImage?
+    @State private var imagePalette: [ColorItem] = []
+    @State private var showImagePicker = false
+    @State private var imageSource: UIImagePickerController.SourceType = .photoLibrary
 
     private var parsedColors: [ColorItem] {
         ColorParser.parse(input)
+    }
+
+    private var recommendedPalettes: [ColorPalette] {
+        RecommendationLibrary.palettes
     }
 
     private var filteredSavedColors: [SavedColor] {
@@ -104,26 +114,41 @@ struct ContentView: View {
     var body: some View {
         NavigationStack {
             List {
-                Section("輸入 Hex 色碼或色票清單") {
-                    TextEditor(text: $input)
-                        .font(.system(.body, design: .monospaced))
-                        .frame(minHeight: 132)
-                        .onChange(of: input) { _, _ in recordHistory() }
-
-                    HStack {
-                        Label("\(parsedColors.count) 個顏色", systemImage: "number")
-                        Spacer()
-                        Button("儲存色系", action: savePalette)
-                            .disabled(parsedColors.isEmpty)
+                Section {
+                    Picker("模式", selection: $selectedMode) {
+                        Text("輸入").tag(0)
+                        Text("圖片").tag(1)
+                        Text("靈感").tag(2)
                     }
+                    .pickerStyle(.segmented)
                 }
 
-                Section("顏色預覽") {
-                    ForEach(parsedColors) { item in
-                        ColorRow(item: item) {
-                            saveColor(item)
+                if selectedMode == 0 {
+                    Section("輸入 Hex 色碼或色票清單") {
+                        TextEditor(text: $input)
+                            .font(.system(.body, design: .monospaced))
+                            .frame(minHeight: 132)
+                            .onChange(of: input) { _, _ in recordHistory() }
+
+                        HStack {
+                            Label("\(parsedColors.count) 個顏色", systemImage: "number")
+                            Spacer()
+                            Button("儲存色系", action: savePalette)
+                                .disabled(parsedColors.isEmpty)
                         }
                     }
+
+                    Section("顏色預覽") {
+                        ForEach(parsedColors) { item in
+                            ColorRow(item: item) {
+                                saveColor(item)
+                            }
+                        }
+                    }
+                } else if selectedMode == 1 {
+                    imagePickerSection
+                } else {
+                    recommendationSection
                 }
 
                 Section {
@@ -207,6 +232,11 @@ struct ContentView: View {
                 sharedImportView
                     .presentationDetents([.medium])
             }
+            .sheet(isPresented: $showImagePicker) {
+                ImagePicker(sourceType: imageSource) { image in
+                    handlePickedImage(image)
+                }
+            }
             .alert("刪除收藏？", isPresented: deleteAlertBinding) {
                 Button("取消", role: .cancel) { deleteTarget = nil }
                 Button("刪除", role: .destructive) { confirmDelete() }
@@ -218,6 +248,83 @@ struct ContentView: View {
                 recordHistory()
                 if session != nil {
                     await syncFromCloud()
+                }
+            }
+        }
+    }
+
+    private var imagePickerSection: some View {
+        Group {
+            Section("圖片取色") {
+                HStack {
+                    Button {
+                        imageSource = .photoLibrary
+                        showImagePicker = true
+                    } label: {
+                        Label("選擇截圖", systemImage: "photo")
+                    }
+
+                    Spacer()
+
+                    Button {
+                        imageSource = .camera
+                        showImagePicker = true
+                    } label: {
+                        Label("拍照", systemImage: "camera")
+                    }
+                    .disabled(!UIImagePickerController.isSourceTypeAvailable(.camera))
+                }
+
+                if let pickedImage {
+                    TappableImage(image: pickedImage) { location, size in
+                        addTappedColor(from: pickedImage, location: location, canvasSize: size)
+                    }
+                    .frame(minHeight: 220)
+                } else {
+                    ContentUnavailableView("還沒有圖片", systemImage: "photo.on.rectangle", description: Text("選擇截圖或拍攝物體後，會自動抓出主要色系。"))
+                }
+            }
+
+            if !imagePalette.isEmpty {
+                Section("偵測到的色系") {
+                    PaletteSummary(title: "圖片色系", colors: imagePalette) {
+                        input = imagePalette.map { "\($0.name) \($0.hex)" }.joined(separator: "\n")
+                        selectedMode = 0
+                    }
+
+                    ForEach(imagePalette) { item in
+                        ColorRow(item: item) {
+                            saveColor(item)
+                        }
+                    }
+
+                    Button("儲存圖片色系") {
+                        savePalette(imagePalette, name: "圖片擷取色系")
+                    }
+                    .disabled(imagePalette.isEmpty)
+                }
+            }
+        }
+    }
+
+    private var recommendationSection: some View {
+        Section("推薦色系") {
+            ForEach(recommendedPalettes) { palette in
+                PaletteSummary(title: palette.name, colors: palette.colors) {
+                    input = palette.colors.map { "\($0.name) \($0.hex)" }.joined(separator: "\n")
+                    selectedMode = 0
+                    recordHistory()
+                }
+                .contextMenu {
+                    Button("儲存色系") {
+                        savePalette(palette.colors, name: palette.name)
+                    }
+                }
+
+                Button {
+                    savePalette(palette.colors, name: palette.name)
+                } label: {
+                    Label("儲存 \(palette.name)", systemImage: "bookmark")
                 }
             }
         }
@@ -346,7 +453,12 @@ struct ContentView: View {
     private func savePalette() {
         let colors = parsedColors
         guard !colors.isEmpty else { return }
-        let palette = ColorPalette(id: makeId(), name: defaultPaletteName(colors), createdAt: now(), colors: colors)
+        savePalette(colors, name: defaultPaletteName(colors))
+    }
+
+    private func savePalette(_ colors: [ColorItem], name: String) {
+        guard !colors.isEmpty else { return }
+        let palette = ColorPalette(id: makeId(), name: name, createdAt: now(), colors: colors)
         savedPalettes.insert(palette, at: 0)
         Store.save(savedPalettes, key: "savedPalettes")
         selectedTab = 2
@@ -524,6 +636,25 @@ struct ContentView: View {
         let query = searchQuery.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         return values.contains { $0.lowercased().contains(query) }
     }
+
+    private func handlePickedImage(_ image: UIImage) {
+        pickedImage = image
+        imagePalette = image.extractedPalette(maxColors: 6)
+        message = imagePalette.isEmpty ? "沒有偵測到色彩" : "已抓出 \(imagePalette.count) 個圖片顏色"
+    }
+
+    private func addTappedColor(from image: UIImage, location: CGPoint, canvasSize: CGSize) {
+        guard let hex = image.hexColor(at: location, canvasSize: canvasSize) else {
+            message = "點的位置不在圖片上"
+            return
+        }
+
+        let color = ColorItem(name: "點選色 \(imagePalette.count + 1)", hex: hex)
+        imagePalette.removeAll { $0.hex == hex }
+        imagePalette.insert(color, at: 0)
+        imagePalette = Array(imagePalette.prefix(8))
+        message = "已加入 \(hex)"
+    }
 }
 
 enum RenameTarget: Identifiable {
@@ -554,6 +685,69 @@ enum DeleteTarget {
         case .color(let item): "\(item.name) \(item.hex)"
         case .palette(let item): "\(item.name)，共 \(item.colors.count) 個顏色"
         }
+    }
+}
+
+struct ImagePicker: UIViewControllerRepresentable {
+    var sourceType: UIImagePickerController.SourceType
+    var onImagePicked: (UIImage) -> Void
+
+    @Environment(\.dismiss) private var dismiss
+
+    func makeUIViewController(context: Context) -> UIImagePickerController {
+        let picker = UIImagePickerController()
+        picker.sourceType = sourceType
+        picker.delegate = context.coordinator
+        return picker
+    }
+
+    func updateUIViewController(_ uiViewController: UIImagePickerController, context: Context) {}
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(parent: self)
+    }
+
+    final class Coordinator: NSObject, UINavigationControllerDelegate, UIImagePickerControllerDelegate {
+        let parent: ImagePicker
+
+        init(parent: ImagePicker) {
+            self.parent = parent
+        }
+
+        func imagePickerController(_ picker: UIImagePickerController, didFinishPickingMediaWithInfo info: [UIImagePickerController.InfoKey: Any]) {
+            if let image = info[.originalImage] as? UIImage {
+                parent.onImagePicked(image)
+            }
+            parent.dismiss()
+        }
+
+        func imagePickerControllerDidCancel(_ picker: UIImagePickerController) {
+            parent.dismiss()
+        }
+    }
+}
+
+struct TappableImage: View {
+    var image: UIImage
+    var onTap: (CGPoint, CGSize) -> Void
+
+    var body: some View {
+        GeometryReader { proxy in
+            Image(uiImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .clipShape(RoundedRectangle(cornerRadius: 8))
+                .overlay(RoundedRectangle(cornerRadius: 8).stroke(.black.opacity(0.08)))
+                .contentShape(Rectangle())
+                .gesture(
+                    SpatialTapGesture()
+                        .onEnded { value in
+                            onTap(value.location, proxy.size)
+                        }
+                )
+        }
+        .aspectRatio(image.size.width / max(image.size.height, 1), contentMode: .fit)
     }
 }
 
@@ -631,6 +825,55 @@ enum ColorParser {
             return "#" + cleaned.uppercased()
         }
         return nil
+    }
+}
+
+enum RecommendationLibrary {
+    static let palettes: [ColorPalette] = [
+        palette("2026 熱門靈感", [
+            ("Transformative Teal", "#4F8F8B"),
+            ("Electric Fuchsia", "#D946EF"),
+            ("Soft Butter", "#F4D06F"),
+            ("Digital Lavender", "#B8A4E3"),
+            ("Grounded Cocoa", "#6E5144")
+        ]),
+        palette("維多利亞壁紙", [
+            ("Dusty Rose", "#B77A7A"),
+            ("Aged Gold", "#B89B5E"),
+            ("Moss Damask", "#596B4F"),
+            ("Faded Cream", "#E8D9B5"),
+            ("Ink Vine", "#2F3430")
+        ]),
+        palette("馬卡龍", [
+            ("Pistachio", "#BFE3C0"),
+            ("Strawberry Milk", "#F6B7C8"),
+            ("Vanilla Cream", "#F7E7B7"),
+            ("Blueberry Foam", "#B8D7F3"),
+            ("Lavender Sugar", "#D9C7EF")
+        ]),
+        palette("森林", [
+            ("Pine Shadow", "#1F3D2B"),
+            ("Fern", "#5E8C61"),
+            ("Moss", "#8EA66A"),
+            ("Bark", "#6B5142"),
+            ("Mist", "#D7DDCF")
+        ]),
+        palette("奶茶日常", [
+            ("Oat Milk", "#E9D9C1"),
+            ("Milk Tea", "#C9A77B"),
+            ("Caramel", "#B98555"),
+            ("Warm Ink", "#3B322B"),
+            ("Porcelain", "#F7F2EA")
+        ])
+    ]
+
+    private static func palette(_ name: String, _ values: [(String, String)]) -> ColorPalette {
+        ColorPalette(
+            id: "recommendation-\(name)",
+            name: name,
+            createdAt: 0,
+            colors: values.map { ColorItem(name: $0.0, hex: $0.1) }
+        )
     }
 }
 
@@ -828,6 +1071,140 @@ extension Color {
             green: Double((number >> 8) & 0xff) / 255,
             blue: Double(number & 0xff) / 255
         )
+    }
+}
+
+private extension UIImage {
+    func extractedPalette(maxColors: Int) -> [ColorItem] {
+        guard let cgImage = renderedCGImage(size: CGSize(width: 88, height: 88)),
+              let data = rgbaData(from: cgImage) else {
+            return []
+        }
+
+        var buckets: [String: (count: Int, red: Int, green: Int, blue: Int)] = [:]
+        let width = cgImage.width
+        let height = cgImage.height
+
+        for index in stride(from: 0, to: width * height * 4, by: 4) {
+            let red = Int(data[index])
+            let green = Int(data[index + 1])
+            let blue = Int(data[index + 2])
+            let alpha = Int(data[index + 3])
+
+            if alpha < 180 { continue }
+            if red + green + blue < 48 { continue }
+            if red + green + blue > 735 { continue }
+
+            let bucketRed = (red / 24) * 24
+            let bucketGreen = (green / 24) * 24
+            let bucketBlue = (blue / 24) * 24
+            let key = "\(bucketRed)-\(bucketGreen)-\(bucketBlue)"
+            let current = buckets[key] ?? (0, 0, 0, 0)
+            buckets[key] = (
+                current.count + 1,
+                current.red + red,
+                current.green + green,
+                current.blue + blue
+            )
+        }
+
+        var selected: [(red: Int, green: Int, blue: Int)] = []
+        for bucket in buckets.values.sorted(by: { $0.count > $1.count }) {
+            let color = (
+                red: bucket.red / max(bucket.count, 1),
+                green: bucket.green / max(bucket.count, 1),
+                blue: bucket.blue / max(bucket.count, 1)
+            )
+
+            guard selected.allSatisfy({ colorDistance(color, $0) > 44 }) else {
+                continue
+            }
+
+            selected.append(color)
+            if selected.count == maxColors { break }
+        }
+
+        return selected.enumerated().map { index, color in
+            ColorItem(name: "圖片色 \(index + 1)", hex: hex(red: color.red, green: color.green, blue: color.blue))
+        }
+    }
+
+    func hexColor(at location: CGPoint, canvasSize: CGSize) -> String? {
+        guard size.width > 0, size.height > 0, canvasSize.width > 0, canvasSize.height > 0 else {
+            return nil
+        }
+
+        let imageAspect = size.width / size.height
+        let canvasAspect = canvasSize.width / canvasSize.height
+        let fittedSize: CGSize
+        if imageAspect > canvasAspect {
+            fittedSize = CGSize(width: canvasSize.width, height: canvasSize.width / imageAspect)
+        } else {
+            fittedSize = CGSize(width: canvasSize.height * imageAspect, height: canvasSize.height)
+        }
+
+        let origin = CGPoint(
+            x: (canvasSize.width - fittedSize.width) / 2,
+            y: (canvasSize.height - fittedSize.height) / 2
+        )
+        let fittedRect = CGRect(origin: origin, size: fittedSize)
+        guard fittedRect.contains(location) else { return nil }
+
+        let relativeX = (location.x - origin.x) / fittedSize.width
+        let relativeY = (location.y - origin.y) / fittedSize.height
+        let renderSize = CGSize(width: max(size.width, 1), height: max(size.height, 1))
+
+        guard let cgImage = renderedCGImage(size: renderSize),
+              let data = rgbaData(from: cgImage) else {
+            return nil
+        }
+
+        let x = min(max(Int(relativeX * CGFloat(cgImage.width)), 0), cgImage.width - 1)
+        let y = min(max(Int(relativeY * CGFloat(cgImage.height)), 0), cgImage.height - 1)
+        let index = (y * cgImage.width + x) * 4
+        return hex(red: Int(data[index]), green: Int(data[index + 1]), blue: Int(data[index + 2]))
+    }
+
+    private func renderedCGImage(size targetSize: CGSize) -> CGImage? {
+        let format = UIGraphicsImageRendererFormat()
+        format.scale = 1
+        format.opaque = true
+        let renderer = UIGraphicsImageRenderer(size: targetSize, format: format)
+        return renderer.image { context in
+            UIColor.white.setFill()
+            context.fill(CGRect(origin: .zero, size: targetSize))
+            draw(in: CGRect(origin: .zero, size: targetSize))
+        }.cgImage
+    }
+
+    private func rgbaData(from cgImage: CGImage) -> [UInt8]? {
+        let width = cgImage.width
+        let height = cgImage.height
+        var data = [UInt8](repeating: 0, count: width * height * 4)
+        guard let context = CGContext(
+            data: &data,
+            width: width,
+            height: height,
+            bitsPerComponent: 8,
+            bytesPerRow: width * 4,
+            space: CGColorSpaceCreateDeviceRGB(),
+            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue
+        ) else {
+            return nil
+        }
+        context.draw(cgImage, in: CGRect(x: 0, y: 0, width: width, height: height))
+        return data
+    }
+
+    private func hex(red: Int, green: Int, blue: Int) -> String {
+        String(format: "#%02X%02X%02X", red, green, blue)
+    }
+
+    private func colorDistance(_ lhs: (red: Int, green: Int, blue: Int), _ rhs: (red: Int, green: Int, blue: Int)) -> Double {
+        let red = Double(lhs.red - rhs.red)
+        let green = Double(lhs.green - rhs.green)
+        let blue = Double(lhs.blue - rhs.blue)
+        return (red * red + green * green + blue * blue).squareRoot()
     }
 }
 
