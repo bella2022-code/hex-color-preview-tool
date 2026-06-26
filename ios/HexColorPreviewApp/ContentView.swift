@@ -2,7 +2,7 @@ import SwiftUI
 
 private let firebaseApiKey = "AIzaSyB6624vmNjfIbrQ6WZZesLxgDps3LwT_BM"
 private let firebaseProjectId = "hex-color-preview-tool"
-private let appGroupIdentifier = "group.com.bella.hexcolorpreview"
+private let appGroupIdentifier = "group.com.chartgreen.hexcolorpreview"
 private let sharedImportKey = "sharedImportedPalettes"
 
 struct ColorItem: Codable, Identifiable, Hashable {

@@ -9,6 +9,8 @@
 /* Begin PBXBuildFile section */
 		9A0000010000000000000001 /* HexColorPreviewAppApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0000010000000000000002 /* HexColorPreviewAppApp.swift */; };
 		9A0000010000000000000003 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0000010000000000000004 /* ContentView.swift */; };
+		9A0000010000000000000016 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 9A0000010000000000000014 /* Assets.xcassets */; };
+		9A0000010000000000000017 /* PrivacyInfo.xcprivacy in Resources */ = {isa = PBXBuildFile; fileRef = 9A0000010000000000000015 /* PrivacyInfo.xcprivacy */; };
 		9B0000010000000000000001 /* ShareViewController.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9B0000010000000000000002 /* ShareViewController.swift */; };
 		9B0000010000000000000003 /* ShareExtension.appex in Embed App Extensions */ = {isa = PBXBuildFile; fileRef = 9B0000010000000000000004 /* ShareExtension.appex */; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
 /* End PBXBuildFile section */
@@ -41,6 +43,8 @@
 		9A0000010000000000000002 /* HexColorPreviewAppApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HexColorPreviewAppApp.swift; sourceTree = "<group>"; };
 		9A0000010000000000000004 /* ContentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ContentView.swift; sourceTree = "<group>"; };
 		9A0000010000000000000005 /* HexColorPreviewApp.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = HexColorPreviewApp.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		9A0000010000000000000014 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+		9A0000010000000000000015 /* PrivacyInfo.xcprivacy */ = {isa = PBXFileReference; lastKnownFileType = text.xml; path = PrivacyInfo.xcprivacy; sourceTree = "<group>"; };
 		9B0000010000000000000002 /* ShareViewController.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShareViewController.swift; sourceTree = "<group>"; };
 		9B0000010000000000000004 /* ShareExtension.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = ShareExtension.appex; sourceTree = BUILT_PRODUCTS_DIR; };
 		9B0000010000000000000008 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
@@ -81,8 +85,19 @@
 				9A0000010000000000000002 /* HexColorPreviewAppApp.swift */,
 				9A0000010000000000000004 /* ContentView.swift */,
 				9B000001000000000000000A /* HexColorPreviewApp.entitlements */,
+				9A0000010000000000000014 /* Assets.xcassets */,
+				9A0000010000000000000015 /* PrivacyInfo.xcprivacy */,
 			);
 			path = HexColorPreviewApp;
+			sourceTree = "<group>";
+		};
+		9A0000010000000000000009 /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				9A0000010000000000000005 /* HexColorPreviewApp.app */,
+				9B0000010000000000000004 /* ShareExtension.appex */,
+			);
+			name = Products;
 			sourceTree = "<group>";
 		};
 		9B000001000000000000000C /* ShareExtension */ = {
@@ -93,15 +108,6 @@
 				9B0000010000000000000009 /* ShareExtension.entitlements */,
 			);
 			path = ShareExtension;
-			sourceTree = "<group>";
-		};
-		9A0000010000000000000009 /* Products */ = {
-			isa = PBXGroup;
-			children = (
-				9A0000010000000000000005 /* HexColorPreviewApp.app */,
-				9B0000010000000000000004 /* ShareExtension.appex */,
-			);
-			name = Products;
 			sourceTree = "<group>";
 		};
 /* End PBXGroup section */
@@ -185,6 +191,8 @@
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				9A0000010000000000000016 /* Assets.xcassets in Resources */,
+				9A0000010000000000000017 /* PrivacyInfo.xcprivacy in Resources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -345,7 +353,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 3RPKR4W4X9;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Hex Color";
@@ -361,7 +369,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.bella.hexcolorpreview;
+				PRODUCT_BUNDLE_IDENTIFIER = com.chartgreen.hexcolorpreview;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -377,7 +385,7 @@
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				DEVELOPMENT_ASSET_PATHS = "";
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 3RPKR4W4X9;
 				ENABLE_PREVIEWS = YES;
 				GENERATE_INFOPLIST_FILE = YES;
 				INFOPLIST_KEY_CFBundleDisplayName = "Hex Color";
@@ -393,7 +401,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.bella.hexcolorpreview;
+				PRODUCT_BUNDLE_IDENTIFIER = com.chartgreen.hexcolorpreview;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SWIFT_EMIT_LOC_STRINGS = YES;
 				SWIFT_VERSION = 5.0;
@@ -408,7 +416,7 @@
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 3RPKR4W4X9;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -418,7 +426,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.bella.hexcolorpreview.ShareExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = com.chartgreen.hexcolorpreview.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -434,7 +442,7 @@
 				CODE_SIGN_ENTITLEMENTS = ShareExtension/ShareExtension.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
-				DEVELOPMENT_TEAM = "";
+				DEVELOPMENT_TEAM = 3RPKR4W4X9;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = ShareExtension/Info.plist;
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
@@ -444,7 +452,7 @@
 					"@executable_path/../../Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = com.bella.hexcolorpreview.ShareExtension;
+				PRODUCT_BUNDLE_IDENTIFIER = com.chartgreen.hexcolorpreview.ShareExtension;
 				PRODUCT_NAME = "$(TARGET_NAME)";
 				SKIP_INSTALL = YES;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -456,20 +464,20 @@
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
-		9A000001000000000000000F /* Build configuration list for PBXProject "HexColorPreviewApp" */ = {
-			isa = XCConfigurationList;
-			buildConfigurations = (
-				9A0000010000000000000010 /* Debug */,
-				9A0000010000000000000011 /* Release */,
-			);
-			defaultConfigurationIsVisible = 0;
-			defaultConfigurationName = Release;
-		};
 		9A000001000000000000000B /* Build configuration list for PBXNativeTarget "HexColorPreviewApp" */ = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
 				9A0000010000000000000012 /* Debug */,
 				9A0000010000000000000013 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		9A000001000000000000000F /* Build configuration list for PBXProject "HexColorPreviewApp" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				9A0000010000000000000010 /* Debug */,
+				9A0000010000000000000011 /* Release */,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;

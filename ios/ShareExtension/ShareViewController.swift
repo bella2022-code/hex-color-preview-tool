@@ -2,7 +2,7 @@ import Social
 import UniformTypeIdentifiers
 
 final class ShareViewController: SLComposeServiceViewController {
-    private let groupIdentifier = "group.com.bella.hexcolorpreview"
+    private let groupIdentifier = "group.com.chartgreen.hexcolorpreview"
     private let sharedImportKey = "sharedImportedPalettes"
 
     override func isContentValid() -> Bool {
