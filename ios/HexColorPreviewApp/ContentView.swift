@@ -55,6 +55,7 @@ struct AuthSession: Codable {
     var email: String
     var localId: String
     var idToken: String
+    var refreshToken: String?
 }
 
 struct ContentView: View {
@@ -614,9 +615,10 @@ struct ContentView: View {
         guard let session else { return }
         do {
             message = "讀取雲端..."
-            let remoteHistory: [HistoryItem] = try await FirebaseClient.fetch("history", session: session)
-            let remoteColors: [SavedColor] = try await FirebaseClient.fetch("savedColors", session: session)
-            let remotePalettes: [ColorPalette] = try await FirebaseClient.fetch("savedPalettes", session: session)
+            let activeSession = try await refreshSessionIfNeeded(session)
+            let remoteHistory: [HistoryItem] = try await FirebaseClient.fetch("history", session: activeSession)
+            let remoteColors: [SavedColor] = try await FirebaseClient.fetch("savedColors", session: activeSession)
+            let remotePalettes: [ColorPalette] = try await FirebaseClient.fetch("savedPalettes", session: activeSession)
 
             history = merge(history, remoteHistory).prefixArray(24)
             savedColors = merge(savedColors, remoteColors)
@@ -626,7 +628,7 @@ struct ContentView: View {
             Store.save(savedPalettes, key: "savedPalettes")
             await syncToCloud()
         } catch {
-            message = "雲端讀取失敗"
+            message = cloudMessage(prefix: "雲端讀取失敗", error: error)
         }
     }
 
@@ -634,13 +636,21 @@ struct ContentView: View {
         guard let session else { return }
         do {
             message = "同步中..."
-            try await FirebaseClient.upload(history, collection: "history", session: session)
-            try await FirebaseClient.upload(savedColors, collection: "savedColors", session: session)
-            try await FirebaseClient.upload(savedPalettes, collection: "savedPalettes", session: session)
+            let activeSession = try await refreshSessionIfNeeded(session)
+            try await FirebaseClient.upload(history, collection: "history", session: activeSession)
+            try await FirebaseClient.upload(savedColors, collection: "savedColors", session: activeSession)
+            try await FirebaseClient.upload(savedPalettes, collection: "savedPalettes", session: activeSession)
             message = "已同步"
         } catch {
-            message = "雲端同步失敗"
+            message = cloudMessage(prefix: "雲端同步失敗", error: error)
         }
+    }
+
+    private func refreshSessionIfNeeded(_ session: AuthSession) async throws -> AuthSession {
+        let refreshed = try await FirebaseClient.refresh(session)
+        self.session = refreshed
+        Store.saveSession(refreshed)
+        return refreshed
     }
 
     private var deleteAlertBinding: Binding<Bool> {
@@ -684,15 +694,25 @@ struct ContentView: View {
             savedColors.removeAll { $0.id == item.id }
             Store.save(savedColors, key: "savedColors")
             message = "已刪除單色"
-            Task { await FirebaseClient.deleteIfPossible("savedColors", id: item.id, session: session) }
+            Task { await deleteRemote("savedColors", id: item.id) }
         case .palette(let item):
             savedPalettes.removeAll { $0.id == item.id }
             Store.save(savedPalettes, key: "savedPalettes")
             message = "已刪除色系"
-            Task { await FirebaseClient.deleteIfPossible("savedPalettes", id: item.id, session: session) }
+            Task { await deleteRemote("savedPalettes", id: item.id) }
         }
 
         self.deleteTarget = nil
+    }
+
+    private func deleteRemote(_ collection: String, id: String) async {
+        guard let session else { return }
+        do {
+            let activeSession = try await refreshSessionIfNeeded(session)
+            try await FirebaseClient.delete(collection, id: id, session: activeSession)
+        } catch {
+            message = cloudMessage(prefix: "雲端刪除失敗", error: error)
+        }
     }
 
     private func confirmSharedImport() {
@@ -977,7 +997,39 @@ enum FirebaseClient {
             throw firebaseError(from: data)
         }
         let decoded = try JSONDecoder().decode(AuthResponse.self, from: data)
-        return AuthSession(email: decoded.email, localId: decoded.localId, idToken: decoded.idToken)
+        return AuthSession(
+            email: decoded.email,
+            localId: decoded.localId,
+            idToken: decoded.idToken,
+            refreshToken: decoded.refreshToken
+        )
+    }
+
+    static func refresh(_ session: AuthSession) async throws -> AuthSession {
+        guard let refreshToken = session.refreshToken, !refreshToken.isEmpty else {
+            throw FirebaseAuthError(code: "MISSING_REFRESH_TOKEN")
+        }
+
+        let url = URL(string: "https://securetoken.googleapis.com/v1/token?key=\(firebaseApiKey)")!
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/x-www-form-urlencoded", forHTTPHeaderField: "Content-Type")
+        let encodedToken = refreshToken.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? refreshToken
+        let body = "grant_type=refresh_token&refresh_token=\(encodedToken)"
+        request.httpBody = body.data(using: .utf8)
+
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else {
+            throw firebaseError(from: data)
+        }
+
+        let decoded = try JSONDecoder().decode(TokenRefreshResponse.self, from: data)
+        return AuthSession(
+            email: session.email,
+            localId: decoded.userId,
+            idToken: decoded.idToken,
+            refreshToken: decoded.refreshToken
+        )
     }
 
     static func resetPassword(email: String) async throws {
@@ -1002,9 +1054,9 @@ enum FirebaseClient {
             var request = authorizedRequest(url, session: session)
             request.httpMethod = "PATCH"
             request.httpBody = try FirestoreCodec.documentData(for: item)
-            let (_, response) = try await URLSession.shared.data(for: request)
+            let (data, response) = try await URLSession.shared.data(for: request)
             guard [200, 201].contains((response as? HTTPURLResponse)?.statusCode ?? 0) else {
-                throw URLError(.cannotWriteToFile)
+                throw firebaseError(from: data)
             }
         }
     }
@@ -1015,7 +1067,7 @@ enum FirebaseClient {
         let (data, response) = try await URLSession.shared.data(for: request)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         if status == 404 { return [] }
-        guard status == 200 else { throw URLError(.badServerResponse) }
+        guard status == 200 else { throw firebaseError(from: data) }
         return try FirestoreCodec.decodeList(T.self, from: data)
     }
 
@@ -1023,15 +1075,10 @@ enum FirebaseClient {
         let url = firestoreURL("users/\(session.localId)/\(collection)/\(id)")
         var request = authorizedRequest(url, session: session)
         request.httpMethod = "DELETE"
-        let (_, response) = try await URLSession.shared.data(for: request)
+        let (data, response) = try await URLSession.shared.data(for: request)
         guard [200, 404].contains((response as? HTTPURLResponse)?.statusCode ?? 0) else {
-            throw URLError(.cannotRemoveFile)
+            throw firebaseError(from: data)
         }
-    }
-
-    static func deleteIfPossible(_ collection: String, id: String, session: AuthSession?) async {
-        guard let session else { return }
-        try? await delete(collection, id: id, session: session)
     }
 
     private static func firestoreURL(_ path: String) -> URL {
@@ -1057,6 +1104,19 @@ struct AuthResponse: Codable {
     var email: String
     var localId: String
     var idToken: String
+    var refreshToken: String
+}
+
+struct TokenRefreshResponse: Codable {
+    var userId: String
+    var idToken: String
+    var refreshToken: String
+
+    enum CodingKeys: String, CodingKey {
+        case userId = "user_id"
+        case idToken = "id_token"
+        case refreshToken = "refresh_token"
+    }
 }
 
 struct FirebaseErrorResponse: Codable {
@@ -1359,6 +1419,32 @@ private func accountMessage(for error: Error) -> String {
     default:
         return "帳號操作失敗：\(error.code)"
     }
+}
+
+private func cloudMessage(prefix: String, error: Error) -> String {
+    if let error = error as? FirebaseAuthError {
+        switch error.code {
+        case "MISSING_REFRESH_TOKEN", "TOKEN_EXPIRED", "INVALID_ID_TOKEN", "USER_NOT_FOUND", "INVALID_REFRESH_TOKEN":
+            return "\(prefix)：請重新登入一次"
+        case let code where code.localizedCaseInsensitiveContains("PERMISSION_DENIED"):
+            return "\(prefix)：Firebase 權限未開"
+        default:
+            return "\(prefix)：\(error.code)"
+        }
+    }
+
+    if let error = error as? URLError {
+        switch error.code {
+        case .notConnectedToInternet:
+            return "\(prefix)：手機沒有網路"
+        case .timedOut:
+            return "\(prefix)：連線逾時"
+        default:
+            return "\(prefix)：網路連線異常"
+        }
+    }
+
+    return "\(prefix)：請稍後再試"
 }
 
 private func commonName(_ hex: String) -> String {
