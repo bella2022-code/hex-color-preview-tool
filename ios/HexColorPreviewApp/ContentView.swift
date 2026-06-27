@@ -86,6 +86,8 @@ struct ContentView: View {
     @State private var imagePalette: [ColorItem] = []
     @State private var showImagePicker = false
     @State private var imageSource: UIImagePickerController.SourceType = .photoLibrary
+    @State private var manualColor = Color(hex: "#C9A77B")
+    @State private var manualColorName = "手動調色"
 
     private var parsedColors: [ColorItem] {
         ColorParser.parse(input)
@@ -93,6 +95,15 @@ struct ContentView: View {
 
     private var recommendedPalettes: [ColorPalette] {
         RecommendationLibrary.palettes
+    }
+
+    private var manualColorHex: String {
+        manualColor.hexString
+    }
+
+    private var manualColorItem: ColorItem {
+        let name = manualColorName.trimmingCharacters(in: .whitespacesAndNewlines)
+        return ColorItem(name: name.isEmpty ? commonName(manualColorHex) : name, hex: manualColorHex)
     }
 
     private var filteredSavedColors: [SavedColor] {
@@ -117,7 +128,7 @@ struct ContentView: View {
                 Section {
                     Picker("模式", selection: $selectedMode) {
                         Text("輸入").tag(0)
-                        Text("圖片").tag(1)
+                        Text("截圖/拍照").tag(1)
                         Text("靈感").tag(2)
                     }
                     .pickerStyle(.segmented)
@@ -145,6 +156,8 @@ struct ContentView: View {
                             }
                         }
                     }
+
+                    manualColorSection
                 } else if selectedMode == 1 {
                     imagePickerSection
                 } else {
@@ -172,8 +185,18 @@ struct ContentView: View {
                         }
                     } else if selectedTab == 1 {
                         ForEach(filteredSavedColors) { item in
-                            ColorRow(item: ColorItem(name: item.name, hex: item.hex), buttonTitle: "載入") {
-                                input = "\(item.name) \(item.hex)"
+                            HStack(spacing: 8) {
+                                ColorRow(item: ColorItem(name: item.name, hex: item.hex), buttonTitle: "載入") {
+                                    input = "\(item.name) \(item.hex)"
+                                }
+
+                                Button(role: .destructive) {
+                                    deleteTarget = .color(item)
+                                } label: {
+                                    Image(systemName: "trash")
+                                }
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel("刪除單色")
                             }
                             .contextMenu {
                                 Button("重新命名") { startRename(.color(item)) }
@@ -187,8 +210,18 @@ struct ContentView: View {
                         }
                     } else {
                         ForEach(filteredSavedPalettes) { palette in
-                            PaletteSummary(title: palette.name, colors: palette.colors) {
-                                input = palette.colors.map { "\($0.name) \($0.hex)" }.joined(separator: "\n")
+                            HStack(spacing: 8) {
+                                PaletteSummary(title: palette.name, colors: palette.colors) {
+                                    input = palette.colors.map { "\($0.name) \($0.hex)" }.joined(separator: "\n")
+                                }
+
+                                Button(role: .destructive) {
+                                    deleteTarget = .palette(palette)
+                                } label: {
+                                    Image(systemName: "trash")
+                                }
+                                .buttonStyle(.borderless)
+                                .accessibilityLabel("刪除色系")
                             }
                             .contextMenu {
                                 Button("重新命名") { startRename(.palette(palette)) }
@@ -256,23 +289,26 @@ struct ContentView: View {
     private var imagePickerSection: some View {
         Group {
             Section("圖片取色") {
-                HStack {
+                VStack(spacing: 10) {
                     Button {
                         imageSource = .photoLibrary
                         showImagePicker = true
                     } label: {
-                        Label("選擇截圖", systemImage: "photo")
+                        Label("從截圖或照片選擇", systemImage: "photo.on.rectangle")
+                            .frame(maxWidth: .infinity)
                     }
+                    .buttonStyle(.borderedProminent)
 
-                    Spacer()
-
-                    Button {
-                        imageSource = .camera
-                        showImagePicker = true
-                    } label: {
-                        Label("拍照", systemImage: "camera")
+                    if UIImagePickerController.isSourceTypeAvailable(.camera) {
+                        Button {
+                            imageSource = .camera
+                            showImagePicker = true
+                        } label: {
+                            Label("打開相機拍照", systemImage: "camera")
+                                .frame(maxWidth: .infinity)
+                        }
+                        .buttonStyle(.bordered)
                     }
-                    .disabled(!UIImagePickerController.isSourceTypeAvailable(.camera))
                 }
 
                 if let pickedImage {
@@ -302,6 +338,43 @@ struct ContentView: View {
                         savePalette(imagePalette, name: "圖片擷取色系")
                     }
                     .disabled(imagePalette.isEmpty)
+                }
+            }
+        }
+    }
+
+    private var manualColorSection: some View {
+        Section("手動調色") {
+            ColorPicker("色環", selection: $manualColor, supportsOpacity: false)
+
+            HStack(spacing: 14) {
+                RoundedRectangle(cornerRadius: 8)
+                    .fill(manualColor)
+                    .frame(width: 58, height: 58)
+                    .overlay(RoundedRectangle(cornerRadius: 8).stroke(.black.opacity(0.08)))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    TextField("顏色名稱", text: $manualColorName)
+                        .textInputAutocapitalization(.words)
+                    Text(manualColorHex)
+                        .font(.system(.subheadline, design: .monospaced))
+                        .foregroundStyle(.secondary)
+                }
+            }
+
+            HStack {
+                Button {
+                    appendManualColorToInput()
+                } label: {
+                    Label("加入輸入", systemImage: "plus")
+                }
+
+                Spacer()
+
+                Button {
+                    saveColor(manualColorItem)
+                } label: {
+                    Label("收藏單色", systemImage: "bookmark")
                 }
             }
         }
@@ -654,6 +727,15 @@ struct ContentView: View {
         imagePalette.insert(color, at: 0)
         imagePalette = Array(imagePalette.prefix(8))
         message = "已加入 \(hex)"
+    }
+
+    private func appendManualColorToInput() {
+        let item = manualColorItem
+        let line = "\(item.name) \(item.hex)"
+        let trimmed = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        input = trimmed.isEmpty ? line : "\(trimmed)\n\(line)"
+        recordHistory()
+        message = "已加入 \(item.hex)"
     }
 }
 
@@ -1070,6 +1152,25 @@ extension Color {
             red: Double((number >> 16) & 0xff) / 255,
             green: Double((number >> 8) & 0xff) / 255,
             blue: Double(number & 0xff) / 255
+        )
+    }
+
+    var hexString: String {
+        let uiColor = UIColor(self)
+        var red: CGFloat = 0
+        var green: CGFloat = 0
+        var blue: CGFloat = 0
+        var alpha: CGFloat = 0
+
+        guard uiColor.getRed(&red, green: &green, blue: &blue, alpha: &alpha) else {
+            return "#000000"
+        }
+
+        return String(
+            format: "#%02X%02X%02X",
+            Int((red * 255).rounded()),
+            Int((green * 255).rounded()),
+            Int((blue * 255).rounded())
         )
     }
 }
